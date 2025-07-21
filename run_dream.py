@@ -25,8 +25,8 @@ sampler = spotpy.algorithms.dream(
 # repetitions: The total number of model runs (iterations). This will be
 #              divided among the chains.
 # For a real calibration, you would use a much higher number (e.g., 50,000+).
-n_chains = 20
-repetitions = 4000 # A small number for a quick test run.
+n_chains = 4  # Minimum for testing - use more (8-20) for real calibration
+repetitions = 100  # Very small for quick functionality test
 
 sampler.sample(repetitions, nChains=n_chains)
 
