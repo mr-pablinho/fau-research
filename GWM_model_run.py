@@ -1,6 +1,19 @@
 
 # %% Import libraries
 import os
+import warnings
+
+# Set environment variable to suppress all deprecation warnings
+os.environ['PYTHONWARNINGS'] = 'ignore::DeprecationWarning'
+
+# Comprehensive warning suppression
+# warnings.filterwarnings("ignore", category=DeprecationWarning)
+# warnings.filterwarnings("ignore", module="pyogrio")
+# warnings.filterwarnings("ignore", module="shapely")
+# warnings.filterwarnings("ignore", message=".*shapely.geos.*")
+# warnings.filterwarnings("ignore", message=".*'shapely.geos' module is deprecated.*")
+# warnings.simplefilter("ignore", DeprecationWarning)
+
 import math
 import flopy
 import pandas as pd
@@ -9,7 +22,7 @@ import numpy as np
 import flopy.utils.binaryfile as bf
 from flopy.utils import HeadFile
 import matplotlib.pyplot as plt
-from shapely.geometry import Point
+# from shapely.geometry import Point
 
 def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kriv_Muhlbach, Kriv_Giessen, Kriv_Griesbach, Kriv_Schwabinger_Bach, Kriv_Wiesackerbach, D_rch1, D_rch2, custom_out_dir=None):
 
@@ -336,7 +349,9 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
         df['Rbott'] = df['Rbott'] + D_riv_val
 
         # --- Replace symbolic conductance with numeric value and convert to float
-        df['Cond'] = df['Cond'].replace(riv_par_dict[river_name]).astype(float)
+        # Create a mapping and apply it to avoid pandas FutureWarning
+        cond_mapping = riv_par_dict[river_name]
+        df['Cond'] = df['Cond'].map(cond_mapping).fillna(df['Cond']).astype(float)
 
         # --- Convert to zero-based indexing for MODFLOW
         df['Layer']  = df['Layer'] - 1
@@ -391,7 +406,8 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
     
     """ Run modflow """
 
-    model.run_model()
+    # Run model silently to suppress verbose stress period output
+    model.run_model(silent=True)
     
     """ # Cleanup: delete all non-output files after model run
     # You can customize which files you consider "output" vs "temporary input" """

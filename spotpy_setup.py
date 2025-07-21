@@ -5,6 +5,7 @@ import tempfile
 import numpy as np
 import pandas as pd
 import spotpy
+from config import OptimizationConfig
 
 # Import your groundwater model function from your script
 # Make sure your script file is named 'your_model_script.py'
@@ -13,38 +14,22 @@ from GWM_model_run import GWM, get_heads_from_obs_csv
 class GWM_Spotpy_Setup:
     """
     A class that connects the Garching FloPy model (GWM) with the SPOTPY framework,
-    using the full set of 19 uncertain parameters.
+    using configurable parameter sets for testing and full optimization.
     """
-    def __init__(self, obs_path='Output1_Input2/obs_values.csv'):
-        # Define the full set of 19 uncertain parameters
-        self.params = [
-            # Hydraulic Conductivities (m/d)
-            spotpy.parameter.Uniform(name='hk1', low=100, high=10000),
-            spotpy.parameter.Uniform(name='hk2', low=100, high=10000),
-            spotpy.parameter.Uniform(name='hk3', low=100, high=10000),
-            spotpy.parameter.Uniform(name='hk4', low=100, high=10000),
-            spotpy.parameter.Uniform(name='hk5', low=100, high=10000),
-            # Specific Yield (-)
-            spotpy.parameter.Uniform(name='sy1', low=0.05, high=0.35),
-            spotpy.parameter.Uniform(name='sy2', low=0.05, high=0.35),
-            spotpy.parameter.Uniform(name='sy3', low=0.05, high=0.35),
-            spotpy.parameter.Uniform(name='sy4', low=0.05, high=0.35),
-            spotpy.parameter.Uniform(name='sy5', low=0.05, high=0.35),
-            # River Stage and Conductance
-            spotpy.parameter.Uniform(name='D_Isar', low=-0.5, high=0.5),
-            spotpy.parameter.Uniform(name='Kriv_Isar', low=10, high=1000),
-            spotpy.parameter.Uniform(name='Kriv_Muhlbach', low=10, high=1000),
-            spotpy.parameter.Uniform(name='Kriv_Giessen', low=10, high=1000),
-            spotpy.parameter.Uniform(name='Kriv_Griesbach', low=10, high=1000),
-            spotpy.parameter.Uniform(name='Kriv_Schwabinger_Bach', low=10, high=1000),
-            spotpy.parameter.Uniform(name='Kriv_Wiesackerbach', low=10, high=1000),
-            # Recharge Multipliers (-)
-            spotpy.parameter.Uniform(name='D_rch1', low=0, high=3),
-            spotpy.parameter.Uniform(name='D_rch2', low=0, high=1)
-        ]
-
+    def __init__(self, obs_path=None):
+        # Use configuration for observation path
+        if obs_path is None:
+            obs_path = OptimizationConfig.OBS_PATH
+            
+        # Get parameter set from configuration
+        self.params = OptimizationConfig.get_parameter_set()
+        self.default_params = OptimizationConfig.get_default_parameters()
+        
         # Load observation data
         self.obs_data = pd.read_csv(obs_path).values
+        
+        # Print configuration info
+        OptimizationConfig.print_config()
 
     def parameters(self):
         """Returns the parameter set definition to SPOTPY."""
@@ -56,26 +41,33 @@ class GWM_Spotpy_Setup:
         `vector` is a parameter set proposed by the DREAM algorithm.
         """
         temp_dir = tempfile.mkdtemp(prefix="gwm_run_")
+        
+        # Create parameter dictionary from optimization vector
         p = {param.name: val for param, val in zip(self.params, vector)}
+        
+        # Merge with default parameters (for parameters not being optimized)
+        full_params = self.default_params.copy()
+        full_params.update(p)
 
         try:
-            # Run the model with the full parameter set from the vector.
-            # No dummy values are needed now.
+            # Run the model with the complete parameter set
             model, out_dir = GWM(
-                hk1=p['hk1'], hk2=p['hk2'], hk3=p['hk3'], hk4=p['hk4'], hk5=p['hk5'],
-                sy1=p['sy1'], sy2=p['sy2'], sy3=p['sy3'], sy4=p['sy4'], sy5=p['sy5'],
-                D_Isar=p['D_Isar'],
-                Kriv_Isar=p['Kriv_Isar'], Kriv_Muhlbach=p['Kriv_Muhlbach'],
-                Kriv_Giessen=p['Kriv_Giessen'], Kriv_Griesbach=p['Kriv_Griesbach'],
-                Kriv_Schwabinger_Bach=p['Kriv_Schwabinger_Bach'],
-                Kriv_Wiesackerbach=p['Kriv_Wiesackerbach'],
-                D_rch1=p['D_rch1'], D_rch2=p['D_rch2'],
+                hk1=full_params['hk1'], hk2=full_params['hk2'], 
+                hk3=full_params['hk3'], hk4=full_params['hk4'], hk5=full_params['hk5'],
+                sy1=full_params['sy1'], sy2=full_params['sy2'], 
+                sy3=full_params['sy3'], sy4=full_params['sy4'], sy5=full_params['sy5'],
+                D_Isar=full_params['D_Isar'],
+                Kriv_Isar=full_params['Kriv_Isar'], Kriv_Muhlbach=full_params['Kriv_Muhlbach'],
+                Kriv_Giessen=full_params['Kriv_Giessen'], Kriv_Griesbach=full_params['Kriv_Griesbach'],
+                Kriv_Schwabinger_Bach=full_params['Kriv_Schwabinger_Bach'],
+                Kriv_Wiesackerbach=full_params['Kriv_Wiesackerbach'],
+                D_rch1=full_params['D_rch1'], D_rch2=full_params['D_rch2'],
                 custom_out_dir=temp_dir
             )
 
             sim_heads = get_heads_from_obs_csv(
                 model_ws=out_dir,
-                obs_csv_path='Output1_Input2/obs.csv'
+                obs_csv_path=OptimizationConfig.OBS_CSV_PATH
             )
             
             # Match simulation output shape to evaluation data shape
@@ -101,5 +93,21 @@ class GWM_Spotpy_Setup:
         if np.isnan(simulation).any():
             return -np.inf
         
-        likelihood = spotpy.likelihoods.gaussianLikelihoodMeasErrorOut(evaluation, simulation)
+        # Create mask for valid (non-NaN) observation data
+        valid_mask = ~np.isnan(evaluation)
+        
+        # Only compare where we have valid observations
+        if not valid_mask.any():
+            return -np.inf  # No valid observations
+        
+        sim_valid = simulation[valid_mask]
+        obs_valid = evaluation[valid_mask]
+        
+        # Simple RMSE-based objective function that should work reliably
+        rmse = np.sqrt(np.mean((sim_valid - obs_valid) ** 2))
+        
+        # Convert RMSE to a likelihood (lower RMSE = higher likelihood)
+        # Use negative RMSE as log-likelihood (higher values are better for SPOTPY)
+        likelihood = -rmse
+        
         return likelihood

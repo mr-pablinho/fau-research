@@ -1,51 +1,102 @@
 # run_dream.py
 
+import os
+import warnings
+
+# Set environment variable to suppress shapely warnings (most effective method)
+os.environ['PYTHONWARNINGS'] = 'ignore::DeprecationWarning'
+
+# Also use warning filters as backup
+# warnings.filterwarnings("ignore", category=DeprecationWarning, module="pyogrio")
+# warnings.filterwarnings("ignore", message=".*shapely.geos.*", category=DeprecationWarning)
+# warnings.filterwarnings("ignore", message=".*'shapely.geos' module is deprecated.*", category=DeprecationWarning)
+# warnings.simplefilter("ignore", DeprecationWarning)
+
 import numpy as np
 import spotpy
 from spotpy_setup import GWM_Spotpy_Setup # Import the class we just created
+from config import OptimizationConfig
+import multiprocessing as mp
 
-# For reproducibility, you can set a random seed
-np.random.seed(42)
+# Required for Windows multiprocessing - MUST be at the very top
+if __name__ == '__main__':
+    mp.freeze_support()
+    
+    # For reproducibility, you can set a random seed
+    np.random.seed(42)
 
-# 1. Initialize the spotpy setup class for your model
-spotpy_setup = GWM_Spotpy_Setup()
+    # 1. Initialize the spotpy setup class for your model
+    spotpy_setup = GWM_Spotpy_Setup()
 
-# 2. Initialize the DREAM sampler
-# dbname: The name of the file to save results to.
-# dbformat: 'csv' is easy to read. 'ram' is faster for long runs.
-sampler = spotpy.algorithms.dream(
-    spotpy_setup,
-    dbname='DREAM_GWM_run',
-    dbformat='csv'
-)
+    # 2. Initialize the DREAM sampler 
+    # For initial testing, start with sequential processing to avoid multiprocessing issues
+    # Change parallel to 'mpc' once everything works
+    sampler = spotpy.algorithms.dream(
+        spotpy_setup,
+        dbname=OptimizationConfig.DB_NAME,
+        dbformat=OptimizationConfig.DB_FORMAT,
+        parallel='mpc'  # Use 'seq' for initial testing, 'mpc' for multiprocessing
+    )
 
-# 3. Start the sampling process
-# nchains: Number of parallel chains. Should be > 1. A good rule is to use
-#          the number of available CPU cores.
-# repetitions: The total number of model runs (iterations). This will be
-#              divided among the chains.
-# For a real calibration, you would use a much higher number (e.g., 50,000+).
-n_chains = 4  # Minimum for testing - use more (8-20) for real calibration
-repetitions = 100  # Very small for quick functionality test
+    # 3. Start the sampling process with parallel execution
+    # Get settings from configuration
+    n_cores = mp.cpu_count()
+    n_chains = OptimizationConfig.DREAM_CHAINS
+    repetitions = OptimizationConfig.REPETITIONS
 
-sampler.sample(repetitions, nChains=n_chains)
+    print(f"Available CPU cores: {n_cores}")
+    print(f"Starting DREAM with {n_chains} chains and {repetitions} repetitions")
+    print(f"Running in SEQUENTIAL mode for initial testing")
+    print(f"Total model runs: {n_chains * repetitions}")
+    print("(To enable parallel processing later, change parallel='seq' to parallel='mpc')")
 
-# 4. Analyze the results
-results = sampler.getdata()
-print("DREAM run finished.")
-print("Best parameter set found:")
+    # For DREAM algorithm requirements:
+    # - Need at least 2*n_parameters + 1 chains for proper sampling
+    n_params = len(spotpy_setup.params)
+    min_chains = 2 * n_params + 1
+    if n_chains < min_chains:
+        print(f"❌ ERROR: DREAM needs at least {min_chains} chains for {n_params} parameters")
+        print(f"Current setting: {n_chains} chains")
+        print("Updating chains to minimum requirement...")
+        n_chains = min_chains
+        print(f"Using {n_chains} chains instead")
 
-# Use the spotpy.analyser to get the best parameter set from the results
-best_params = spotpy.analyser.get_best_parameterset(results)
-print(best_params)
+    print(f"Final configuration: {n_chains} chains × {repetitions} repetitions = {n_chains * repetitions} total runs")
 
-# You can also get the corresponding best objective function value and simulation
-best_likelihood = spotpy.analyser.get_maxlikehood(results)
-best_simulation = spotpy.analyser.get_best_simulation(results)
+    try:
+        sampler.sample(repetitions, nChains=n_chains)
+        
+        # 4. Analyze the results
+        results = sampler.getdata()
+        print("DREAM run finished.")
+        print("Best parameter set found:")
 
-print(f"\nBest Likelihood: {best_likelihood}")
+        # Use the spotpy.analyser to get the best parameter set from the results
+        best_params = spotpy.analyser.get_best_parameterset(results)
+        print(best_params)
 
-# You can also use spotpy's built-in plotting tools
-# Plot the posterior distributions of the parameters
-spotpy.analyser.plot_parameter_trace(results)
-spotpy.analyser.plot_posterior_parameter_histogram(results, bins=30)
+        # You can also get the corresponding best objective function value
+        print(f"\nBest objective value: {results['like1'].max()}")
+
+        print(f"Number of model runs completed: {len(results)}")
+
+        # You can also use spotpy's built-in plotting tools (commented out for now)
+        # spotpy.analyser.plot_parameter_trace(results)
+        # spotpy.analyser.plot_posterior_parameter_histogram(results)
+        
+    except Exception as e:
+        print(f"❌ Error during DREAM execution: {e}")
+        print("This might be due to:")
+        print("1. Insufficient number of chains for DREAM algorithm")
+        print("2. Model execution failures")
+        print("3. Multiprocessing issues")
+        
+        # Try to get any available results
+        try:
+            if hasattr(sampler, 'datawriter') and sampler.datawriter is not None:
+                results = sampler.getdata()
+                print(f"Partial results available: {len(results)} runs completed")
+            else:
+                print("No results available - sampling may not have started properly")
+        except:
+            print("Could not retrieve any results")
