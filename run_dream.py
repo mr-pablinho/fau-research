@@ -2,16 +2,6 @@
 
 import os
 import warnings
-
-# Set environment variable to suppress shapely warnings (most effective method)
-os.environ['PYTHONWARNINGS'] = 'ignore::DeprecationWarning'
-
-# Also use warning filters as backup
-# warnings.filterwarnings("ignore", category=DeprecationWarning, module="pyogrio")
-# warnings.filterwarnings("ignore", message=".*shapely.geos.*", category=DeprecationWarning)
-# warnings.filterwarnings("ignore", message=".*'shapely.geos' module is deprecated.*", category=DeprecationWarning)
-# warnings.simplefilter("ignore", DeprecationWarning)
-
 import numpy as np
 import spotpy
 from spotpy_setup import GWM_Spotpy_Setup # Import the class we just created
@@ -31,11 +21,12 @@ if __name__ == '__main__':
     # 2. Initialize the DREAM sampler 
     # For initial testing, start with sequential processing to avoid multiprocessing issues
     # Change parallel to 'mpc' once everything works
+    processing = 'mpc'  # Use 'mpc' for multiprocessing later
     sampler = spotpy.algorithms.dream(
         spotpy_setup,
         dbname=OptimizationConfig.DB_NAME,
         dbformat=OptimizationConfig.DB_FORMAT,
-        parallel='mpc'  # Use 'seq' for initial testing, 'mpc' for multiprocessing
+        parallel=processing  # Use 'seq' for initial testing, 'mpc' for multiprocessing
     )
 
     # 3. Start the sampling process with parallel execution
@@ -46,9 +37,8 @@ if __name__ == '__main__':
 
     print(f"Available CPU cores: {n_cores}")
     print(f"Starting DREAM with {n_chains} chains and {repetitions} repetitions")
-    print(f"Running in SEQUENTIAL mode for initial testing")
+    print(f"Running in {processing} mode for initial testing")
     print(f"Total model runs: {n_chains * repetitions}")
-    print("(To enable parallel processing later, change parallel='seq' to parallel='mpc')")
 
     # For DREAM algorithm requirements:
     # - Need at least 2*n_parameters + 1 chains for proper sampling

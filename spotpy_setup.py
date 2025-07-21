@@ -16,7 +16,12 @@ class GWM_Spotpy_Setup:
     A class that connects the Garching FloPy model (GWM) with the SPOTPY framework,
     using configurable parameter sets for testing and full optimization.
     """
-    def __init__(self, obs_path=None):
+    # Class variable for max_runs only
+    max_runs = None
+    # File to store repetition count
+    counter_file = os.path.join(tempfile.gettempdir(), 'gwm_spotpy_counter.txt')
+
+    def __init__(self, obs_path=None, max_runs=None):
         # Use configuration for observation path
         if obs_path is None:
             obs_path = OptimizationConfig.OBS_PATH
@@ -30,6 +35,16 @@ class GWM_Spotpy_Setup:
         
         # Print configuration info
         OptimizationConfig.print_config()
+        # Set max_runs only if provided
+        if max_runs is not None:
+            GWM_Spotpy_Setup.max_runs = max_runs
+
+        # Reset the counter file to 0 at the start of a new run
+        try:
+            with open(GWM_Spotpy_Setup.counter_file, 'w') as f:
+                f.write('0')
+        except Exception as e:
+            print(f"Warning: Could not reset repetition counter file: {e}")
 
     def parameters(self):
         """Returns the parameter set definition to SPOTPY."""
@@ -40,6 +55,27 @@ class GWM_Spotpy_Setup:
         Runs a single simulation of the FloPy model.
         `vector` is a parameter set proposed by the DREAM algorithm.
         """
+        # File-based repetition counter (robust to multiprocessing)
+        import threading
+        lock = threading.Lock()
+        with lock:
+            try:
+                with open(GWM_Spotpy_Setup.counter_file, 'r+') as f:
+                    count = int(f.read().strip()) + 1
+                    f.seek(0)
+                    f.write(str(count))
+                    f.truncate()
+            except FileNotFoundError:
+                count = 1
+                with open(GWM_Spotpy_Setup.counter_file, 'w') as f:
+                    f.write(str(count))
+            except Exception:
+                count = -1  # fallback if error
+        # Print repetition info
+        if GWM_Spotpy_Setup.max_runs is not None:
+            print(f"Running simulation {count} out of {GWM_Spotpy_Setup.max_runs}")
+        else:
+            print(f"Running simulation {count}")
         temp_dir = tempfile.mkdtemp(prefix="gwm_run_")
         
         # Create parameter dictionary from optimization vector

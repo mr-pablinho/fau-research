@@ -1,23 +1,13 @@
 
 # %% Import libraries
+
 import os
+from time import sleep
 import warnings
-
-# Set environment variable to suppress all deprecation warnings
-os.environ['PYTHONWARNINGS'] = 'ignore::DeprecationWarning'
-
-# Comprehensive warning suppression
-# warnings.filterwarnings("ignore", category=DeprecationWarning)
-# warnings.filterwarnings("ignore", module="pyogrio")
-# warnings.filterwarnings("ignore", module="shapely")
-# warnings.filterwarnings("ignore", message=".*shapely.geos.*")
-# warnings.filterwarnings("ignore", message=".*'shapely.geos' module is deprecated.*")
-# warnings.simplefilter("ignore", DeprecationWarning)
-
 import math
 import flopy
 import pandas as pd
-import geopandas as gpd
+# import geopandas as gpd
 import numpy as np
 import flopy.utils.binaryfile as bf
 from flopy.utils import HeadFile
@@ -77,10 +67,17 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
 
     model           = flopy.modflow.Modflow(modelname,version="mfnwt", exe_name="MODFLOW-NWT_64", model_ws=out_dir)
     domain_shpname  = os.path.join(in_dir,shape_name)
-    gdf             = gpd.read_file(domain_shpname)
-    bounds          = gdf.bounds
-    x_min, y_min, x_max, y_max = bounds.minx[0], bounds.miny[0], bounds.maxx[0], bounds.maxy[0]
-    domain_polygon  = gdf.geometry[0] 
+    # gdf             = gpd.read_file(domain_shpname)
+    # bounds          = gdf.bounds
+    # x_min, y_min, x_max, y_max = bounds.minx[0], bounds.miny[0], bounds.maxx[0], bounds.maxy[0]
+    x_min, y_min, x_max, y_max = 692090.4963030412, 5342930.1120141, 700141.6957627917, 5352057.373846412
+    # print(f"Model domain bounds: {bounds}")
+    # print(f"x_min: {x_min}, y_min: {y_min}, x_max: {x_max}, y_max: {y_max}")
+    # domain_polygon  = gdf.geometry[0] 
+    # print(f"Domain polygon: {domain_polygon}")
+    
+    # wait 30 seconds to see the output
+    # sleep(30)
 
     # Add Spatial discretization
     x_min           = math.floor(x_min / grid_size) * grid_size
@@ -467,7 +464,7 @@ def get_heads_from_obs_csv(model_ws, obs_csv_path='Output1_Input2/obs.csv'):
     hds = flopy.utils.HeadFile(hds_path)
 
     available_kstpkper = hds.get_kstpkper()
-    print(f"\n? Available head time steps in output: {available_kstpkper}")
+    # print(f"\n? Available head time steps in output: {available_kstpkper}")
 
     sim_heads = []
     for kstpkper in available_kstpkper:

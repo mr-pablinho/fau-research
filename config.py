@@ -10,7 +10,7 @@ class OptimizationConfig:
     """
     
     # Test mode: Use fewer parameters for quick testing
-    TEST_MODE = True  # Set to False for full parameter set
+    TEST_MODE = False  # Set to False for full parameter set
     
     # Algorithm settings
     DREAM_CHAINS = 8 if TEST_MODE else 40  # Increased to 8 for 2 parameters (2*2+1=5, using 8 for safety)
