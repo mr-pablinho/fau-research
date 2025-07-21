@@ -1,0 +1,25 @@
+
+original_bounds = [
+    [100, 10000],    # hk1 # hydraulic conductivity (m/d) 
+    [100, 10000],   # hk2 
+    [100, 10000],  # hk3 
+    [100, 10000],    # hk4
+    [100, 10000],   # hk5
+    [0.05, 0.35], # sy1 # specific yield (-) 
+    [0.05, 0.35],  # sy2 
+    [0.05, 0.35],  # sy3 
+    [0.05, 0.35],  # sy4 
+    [0.05, 0.35],  # sy5 
+    
+    [-0.5, 0.5],  # D_Isar # stream stage variation (m)
+    [10, 1000],    # Kriv_Isar river bed conductance (m2/d)
+    [10, 1000],    #     Kriv_Muhlbach 
+    [10, 1000],  #Kriv_Giessen 
+    [10, 1000],  #Kriv_Griesbach
+    [10, 1000],  #Kriv_Schwabinger_Bach
+    [10, 1000],   #Kriv_Wiesackerbach 
+    
+    [0, 3],        # D_rch1 # recharge muliplier (-) for non-urban area
+    [0, 1]        # D_rch2 # recharge muliplier (-) for urban area
+    
+]
