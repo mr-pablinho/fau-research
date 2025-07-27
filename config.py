@@ -10,11 +10,11 @@ class OptimizationConfig:
     """
     
     # Test mode: Use fewer parameters for quick testing
-    TEST_MODE = False  # Set to False for full parameter set
+    TEST_MODE = True  # Set to False for full parameter set
     
     # Algorithm settings
-    DREAM_CHAINS = 8 if TEST_MODE else 40  # Increased to 8 for 2 parameters (2*2+1=5, using 8 for safety)
-    REPETITIONS = 15 if TEST_MODE else 1000  # Slightly increased for stability
+    DREAM_CHAINS = 20 if TEST_MODE else 40  # Increased to 20 for 2 parameters (2*2+1=5, using 20 for safety)
+    REPETITIONS = 1000 if TEST_MODE else 200  # Slightly increased for stability
     
     # Observation data settings
     OBS_PATH = 'Output1_Input2/obs_values.csv'
@@ -36,7 +36,11 @@ class OptimizationConfig:
             return [
                 # Key Hydraulic Conductivities (most sensitive layers)
                 spotpy.parameter.Uniform(name='hk1', low=100, high=10000),
+                spotpy.parameter.Uniform(name='hk2', low=100, high=10000),
                 spotpy.parameter.Uniform(name='hk3', low=100, high=10000),
+                spotpy.parameter.Uniform(name='hk4', low=100, high=10000),
+                spotpy.parameter.Uniform(name='hk5', low=100, high=10000),
+                spotpy.parameter.Uniform(name='Kriv_Isar', low=10, high=1000),
             ]
         else:
             # Full parameter set (19 parameters)

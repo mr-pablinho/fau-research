@@ -108,21 +108,26 @@ class GWM_Spotpy_Setup:
             
             # Match simulation output shape to evaluation data shape
             if sim_heads.shape[0] > 100:
-                 return sim_heads[-100:, :]
+                sim_output = sim_heads[-100:, :]
             else:
-                 return sim_heads
+                sim_output = sim_heads
+            
+            # CRITICAL: Flatten to 1D array for SPOTPY
+            return sim_output.flatten()
 
         except Exception as e:
             import traceback
             print(f"⚠️ Model run failed with parameters {vector}:")
             # This next line is the crucial debugging step
             traceback.print_exc() 
-            return np.full(self.obs_data[-100:, :].shape, np.nan)
+            # Return flattened NaN array matching expected shape
+            return np.full(self.obs_data[-100:, :].shape, np.nan).flatten()
         
     def evaluation(self):
         """Returns the observation data to SPOTPY."""
         # Return the same slice of observations as in the simulation method.
-        return self.obs_data[-100:, :]
+        # CRITICAL: Flatten to 1D array for SPOTPY
+        return self.obs_data[-100:, :].flatten()
 
     def objectivefunction(self, simulation, evaluation, params=None):
         """Calculates the log-likelihood for DREAM."""

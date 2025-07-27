@@ -18,14 +18,13 @@ if __name__ == '__main__':
     # 1. Initialize the spotpy setup class for your model
     spotpy_setup = GWM_Spotpy_Setup()
 
-    # 2. Initialize the DREAM sampler 
-    # For initial testing, start with sequential processing to avoid multiprocessing issues
-    # Change parallel to 'mpc' once everything works
-    processing = 'mpc'  # Use 'mpc' for multiprocessing later
+    # 2. Initialize the DREAM sampler with CSV storage (HDF5 not available)
+    # CSV format works fine now that we've fixed the array flattening issue
+    processing = 'seq'  # Use 'mpc' for multiprocessing later
     sampler = spotpy.algorithms.dream(
         spotpy_setup,
         dbname=OptimizationConfig.DB_NAME,
-        dbformat=OptimizationConfig.DB_FORMAT,
+        dbformat='csv',  # Back to CSV since HDF5 not available
         parallel=processing  # Use 'seq' for initial testing, 'mpc' for multiprocessing
     )
 
@@ -52,23 +51,37 @@ if __name__ == '__main__':
         print(f"Using {n_chains} chains instead")
 
     print(f"Final configuration: {n_chains} chains × {repetitions} repetitions = {n_chains * repetitions} total runs")
+    
+    # Set max_runs for progress tracking
+    spotpy_setup.max_runs = n_chains * repetitions
 
     try:
+        print("🚀 Starting DREAM optimization...")
         sampler.sample(repetitions, nChains=n_chains)
+        
+        print("✅ DREAM run finished successfully!")
         
         # 4. Analyze the results
         results = sampler.getdata()
-        print("DREAM run finished.")
-        print("Best parameter set found:")
+        
+        if results is not None and len(results) > 0:
+            print(f"📊 Analysis of {len(results)} completed runs:")
+            
+            # Use the spotpy.analyser to get the best parameter set from the results
+            best_params = spotpy.analyser.get_best_parameterset(results)
+            print("🎯 Best parameter set found:")
+            print(best_params)
 
-        # Use the spotpy.analyser to get the best parameter set from the results
-        best_params = spotpy.analyser.get_best_parameterset(results)
-        print(best_params)
-
-        # You can also get the corresponding best objective function value
-        print(f"\nBest objective value: {results['like1'].max()}")
-
-        print(f"Number of model runs completed: {len(results)}")
+            # You can also get the corresponding best objective function value
+            best_objective = results['like1'].max()
+            print(f"🏆 Best objective value: {best_objective}")
+            
+            print(f"✅ Successfully completed {len(results)} model runs")
+            
+            # Save results summary
+            print(f"💾 Results saved to: {OptimizationConfig.DB_NAME}.csv")
+        else:
+            print("⚠️ No results were obtained from the optimization")
 
         # You can also use spotpy's built-in plotting tools (commented out for now)
         # spotpy.analyser.plot_parameter_trace(results)
@@ -76,17 +89,33 @@ if __name__ == '__main__':
         
     except Exception as e:
         print(f"❌ Error during DREAM execution: {e}")
-        print("This might be due to:")
-        print("1. Insufficient number of chains for DREAM algorithm")
-        print("2. Model execution failures")
-        print("3. Multiprocessing issues")
+        import traceback
+        traceback.print_exc()
+        
+        print("\n🔍 Possible causes:")
+        print("1. Array shape mismatch (now fixed with flattening)")
+        print("2. Insufficient number of chains for DREAM algorithm")
+        print("3. Model execution failures")
+        print("4. Multiprocessing issues")
         
         # Try to get any available results
         try:
             if hasattr(sampler, 'datawriter') and sampler.datawriter is not None:
                 results = sampler.getdata()
-                print(f"Partial results available: {len(results)} runs completed")
+                if results is not None and len(results) > 0:
+                    print(f"📊 Partial results retrieved: {len(results)} runs completed")
+                    
+                    # Show best partial result
+                    try:
+                        best_partial = spotpy.analyser.get_best_parameterset(results)
+                        print("🎯 Best partial result:")
+                        print(best_partial)
+                        print(f"🏆 Best partial objective: {results['like1'].max()}")
+                    except Exception as inner_e:
+                        print(f"Could not analyze partial results: {inner_e}")
+                else:
+                    print("📊 No valid results available")
             else:
-                print("No results available - sampling may not have started properly")
-        except:
-            print("Could not retrieve any results")
+                print("📊 No results available - sampling may not have started properly")
+        except Exception as retrieval_error:
+            print(f"📊 Could not retrieve any results: {retrieval_error}")
