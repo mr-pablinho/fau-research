@@ -4,28 +4,20 @@ from spotpy_setup import GWM_Spotpy_Setup
 from config import OptimizationConfig
 import multiprocessing as mp
 
-# Required for Windows multiprocessing - MUST be at the very top
 if __name__ == '__main__':
     mp.freeze_support()
-    
-    # For reproducibility, you can set a random seed
     np.random.seed(42)
 
-    # 1. Initialize the spotpy setup class for your model
     spotpy_setup = GWM_Spotpy_Setup()
-
-    # 2. Initialize the DREAM sampler with CSV storage (HDF5 not available)
-    # CSV format works fine now that we've fixed the array flattening issue
-    processing = 'seq'  # Use 'mpc' for multiprocessing later
+    
+    processing = 'seq'  # 'mpc' for multiprocessing later (still don't manage to get it working)
     sampler = spotpy.algorithms.dream(
         spotpy_setup,
         dbname=OptimizationConfig.DB_NAME,
-        dbformat='csv',  # Back to CSV since HDF5 not available
-        parallel=processing  # Use 'seq' for initial testing, 'mpc' for multiprocessing
+        dbformat='csv',
+        parallel=processing
     )
 
-    # 3. Start the sampling process with parallel execution
-    # Get settings from configuration
     n_cores = mp.cpu_count()
     n_chains = OptimizationConfig.DREAM_CHAINS
     repetitions = OptimizationConfig.REPETITIONS
@@ -35,10 +27,8 @@ if __name__ == '__main__':
     print(f"Running in {processing} mode for initial testing")
     print(f"Total model runs: {n_chains * repetitions}")
 
-    # For DREAM algorithm requirements:
-    # - Need at least 2*n_parameters + 1 chains for proper sampling
     n_params = len(spotpy_setup.params)
-    min_chains = 2 * n_params + 1
+    min_chains = 2 * n_params + 1 
     if n_chains < min_chains:
         print(f"❌ ERROR: DREAM needs at least {min_chains} chains for {n_params} parameters")
         print(f"Current setting: {n_chains} chains")
@@ -48,7 +38,6 @@ if __name__ == '__main__':
 
     print(f"Final configuration: {n_chains} chains × {repetitions} repetitions = {n_chains * repetitions} total runs")
     
-    # Set max_runs for progress tracking
     spotpy_setup.max_runs = n_chains * repetitions
 
     try:
@@ -57,31 +46,19 @@ if __name__ == '__main__':
         
         print("✅ DREAM run finished successfully!")
         
-        # 4. Analyze the results
         results = sampler.getdata()
         
         if results is not None and len(results) > 0:
-            print(f"📊 Analysis of {len(results)} completed runs:")
-            
-            # Use the spotpy.analyser to get the best parameter set from the results
             best_params = spotpy.analyser.get_best_parameterset(results)
+            best_objective = results['like1'].max()
+            print(f"📊 Analysis of {len(results)} completed runs:")
             print("🎯 Best parameter set found:")
             print(best_params)
-
-            # You can also get the corresponding best objective function value
-            best_objective = results['like1'].max()
             print(f"🏆 Best objective value: {best_objective}")
-            
             print(f"✅ Successfully completed {len(results)} model runs")
-            
-            # Save results summary
             print(f"💾 Results saved to: {OptimizationConfig.DB_NAME}.csv")
         else:
             print("⚠️ No results were obtained from the optimization")
-
-        # You can also use spotpy's built-in plotting tools (commented out for now)
-        # spotpy.analyser.plot_parameter_trace(results)
-        # spotpy.analyser.plot_posterior_parameter_histogram(results)
         
     except Exception as e:
         print(f"❌ Error during DREAM execution: {e}")
@@ -94,14 +71,12 @@ if __name__ == '__main__':
         print("3. Model execution failures")
         print("4. Multiprocessing issues")
         
-        # Try to get any available results
         try:
             if hasattr(sampler, 'datawriter') and sampler.datawriter is not None:
                 results = sampler.getdata()
                 if results is not None and len(results) > 0:
                     print(f"📊 Partial results retrieved: {len(results)} runs completed")
                     
-                    # Show best partial result
                     try:
                         best_partial = spotpy.analyser.get_best_parameterset(results)
                         print("🎯 Best partial result:")
