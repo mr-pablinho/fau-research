@@ -7,4 +7,7 @@ Output1_Input2/
 Output2/
 *.png
 old_results/
-bayes2022/
+bayes2022/inputs/
+bayes2022/outputs/
+bayes2022/obs/
+bayes2022/logs/
