@@ -1,9 +1,5 @@
 
-# %% Import libraries
-
 import os
-from time import sleep
-import warnings
 import math
 import flopy
 import pandas as pd
@@ -34,16 +30,16 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
 
     """ #%% Model parameters """
     # UPW
-    hk1             = hk1  # hydraulic conductivity (m/d)
-    hk2             = hk2  
-    hk3             = hk3 
-    hk4             = hk4  
-    hk5             = hk5 
-    sy1             = sy1 # specific yield (-)
-    sy2             = sy2 
-    sy3             = sy3
-    sy4             = sy4 
-    sy5             = sy5
+    hk1 = hk1  # hydraulic conductivity (m/d)
+    hk2 = hk2  
+    hk3 = hk3 
+    hk4 = hk4  
+    hk5 = hk5 
+    sy1 = sy1 # specific yield (-)
+    sy2 = sy2 
+    sy3 = sy3
+    sy4 = sy4 
+    sy5 = sy5
 
     # RIV
     D_Isar = D_Isar # Stage 

@@ -1,14 +1,9 @@
-# spotpy_setup.py
-
 import os
 import tempfile
 import numpy as np
 import pandas as pd
 import spotpy
 from config import OptimizationConfig
-
-# Import your groundwater model function from your script
-# Make sure your script file is named 'your_model_script.py'
 from GWM_model_run import GWM, get_heads_from_obs_csv
 
 class GWM_Spotpy_Setup:

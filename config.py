@@ -1,40 +1,18 @@
-# config.py
-# Configuration file for SPOTPY optimization setup
-
 import spotpy
 
 class OptimizationConfig:
-    """
-    Configuration class for SPOTPY optimization parameters and settings.
-    Modify this file to easily change parameter sets and algorithm settings.
-    """
-    
-    # Test mode: Use fewer parameters for quick testing
-    TEST_MODE = True  # Set to False for full parameter set
-    
-    # Algorithm settings
-    DREAM_CHAINS = 20 if TEST_MODE else 40  # Increased to 20 for 2 parameters (2*2+1=5, using 20 for safety)
-    REPETITIONS = 1000 if TEST_MODE else 200  # Slightly increased for stability
-    
-    # Observation data settings
+    TEST_MODE = True
+    DREAM_CHAINS = 20 if TEST_MODE else 40
+    REPETITIONS = 1000 if TEST_MODE else 200
     OBS_PATH = 'Output1_Input2/obs_values.csv'
     OBS_CSV_PATH = 'Output1_Input2/obs.csv'
-    
-    # Database settings
     DB_NAME = 'DREAM_GWM_test' if TEST_MODE else 'DREAM_GWM_run'
     DB_FORMAT = 'csv'
     
     @classmethod
     def get_parameter_set(cls):
-        """
-        Returns the parameter set based on current configuration.
-        In TEST_MODE: Uses only a subset of parameters for quick testing.
-        In FULL_MODE: Uses all 19 parameters for complete optimization.
-        """
         if cls.TEST_MODE:
-            # Minimal parameter set for testing (2 parameters only)
             return [
-                # Key Hydraulic Conductivities (most sensitive layers)
                 spotpy.parameter.Uniform(name='hk1', low=100, high=10000),
                 spotpy.parameter.Uniform(name='hk2', low=100, high=10000),
                 spotpy.parameter.Uniform(name='hk3', low=100, high=10000),
@@ -43,7 +21,6 @@ class OptimizationConfig:
                 spotpy.parameter.Uniform(name='Kriv_Isar', low=10, high=1000),
             ]
         else:
-            # Full parameter set (19 parameters)
             return [
                 # Hydraulic Conductivities (m/d)
                 spotpy.parameter.Uniform(name='hk1', low=100, high=10000),
@@ -72,10 +49,6 @@ class OptimizationConfig:
     
     @classmethod
     def get_default_parameters(cls):
-        """
-        Returns default values for parameters not included in optimization.
-        Used when running in TEST_MODE to provide fixed values for unused parameters.
-        """
         return {
             # Default hydraulic conductivities (m/d)
             'hk1': 5000,
@@ -104,7 +77,6 @@ class OptimizationConfig:
     
     @classmethod
     def print_config(cls):
-        """Print current configuration settings."""
         mode = "TEST MODE" if cls.TEST_MODE else "FULL MODE"
         n_params = len(cls.get_parameter_set())
         

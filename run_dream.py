@@ -1,10 +1,6 @@
-# run_dream.py
-
-import os
-import warnings
 import numpy as np
 import spotpy
-from spotpy_setup import GWM_Spotpy_Setup # Import the class we just created
+from spotpy_setup import GWM_Spotpy_Setup
 from config import OptimizationConfig
 import multiprocessing as mp
 
