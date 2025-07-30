@@ -62,18 +62,7 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
     nlay            = 1 
 
     model           = flopy.modflow.Modflow(modelname,version="mfnwt", exe_name="MODFLOW-NWT_64", model_ws=out_dir)
-    domain_shpname  = os.path.join(in_dir,shape_name)
-    # gdf             = gpd.read_file(domain_shpname)
-    # bounds          = gdf.bounds
-    # x_min, y_min, x_max, y_max = bounds.minx[0], bounds.miny[0], bounds.maxx[0], bounds.maxy[0]
     x_min, y_min, x_max, y_max = 692090.4963030412, 5342930.1120141, 700141.6957627917, 5352057.373846412
-    # print(f"Model domain bounds: {bounds}")
-    # print(f"x_min: {x_min}, y_min: {y_min}, x_max: {x_max}, y_max: {y_max}")
-    # domain_polygon  = gdf.geometry[0] 
-    # print(f"Domain polygon: {domain_polygon}")
-    
-    # wait 30 seconds to see the output
-    # sleep(30)
 
     # Add Spatial discretization
     x_min           = math.floor(x_min / grid_size) * grid_size
