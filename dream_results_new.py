@@ -189,35 +189,183 @@ def generate_summary_table(param_stats, save_dir='dream_plots_gwm'):
     summary_df.to_csv(f'{save_dir}/parameter_summary.csv')
     print(f"\nSummary table saved to {save_dir}/parameter_summary.csv")
 
+# === Additional Visualizations (from old version) ===
+def plot_prior_posterior_histograms(prior_samples, posterior_samples, param_names, param_distros, save_dir='dream_plots_gwm'):
+    """Overlay prior and posterior histograms for each parameter"""
+    import matplotlib.pyplot as plt
+    os.makedirs(save_dir, exist_ok=True)
+    bars = 15
+    alpha = 0.60
+    for i, param_name in enumerate(param_names):
+        plt.figure(f'histogram_prior_posterior_{param_name}', figsize=(3,3))
+        # Prior
+        plt.hist(prior_samples[:,i], bars, alpha=alpha+0.2, color='orange', label="Prior distribution",
+                 range=(param_distros[i].minbound, param_distros[i].maxbound), density=False, stacked=True)
+        # Posterior
+        plt.hist(posterior_samples[:,i], bars, alpha=alpha, color='blue', label="Posterior distribution",
+                 range=(param_distros[i].minbound, param_distros[i].maxbound), density=False, stacked=True)
+        plt.ylabel('Frequency', fontsize=12)
+        plt.xlim(min(prior_samples[:,i].min(), posterior_samples[:,i].min()),
+                 max(prior_samples[:,i].max(), posterior_samples[:,i].max()))
+        plt.title(f'Histogram - {param_name}')
+        plt.legend(edgecolor='black', fancybox=False, fontsize=8.5,
+                    borderpad=0.8, handletextpad=0.9, labelspacing=0.65)
+        plt.tight_layout()
+        plt.savefig(f'{save_dir}/histogram_prior_posterior_{param_name}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+
+def plot_predictive_uncertainty(sims_all, observations, obs_wells, save_dir='dream_plots_gwm'):
+    """Plot predictive mean ± std bands for model outputs vs. observations"""
+    import matplotlib.pyplot as plt
+    os.makedirs(save_dir, exist_ok=True)
+    sp_coord = np.arange(sims_all.shape[2])
+    sims_all_exp = np.mean(sims_all, axis=0)
+    sims_all_std = np.std(sims_all, axis=0)
+    colors = ['black', 'deepskyblue', 'red']
+    for i, well in enumerate(obs_wells):
+        plt.figure(f'uncertainty_{well}', figsize=[6,3])
+        plt.title(f'{well}', loc='left', fontsize=15)
+        plt.plot(sp_coord, sims_all_exp[i,:], color='blue', alpha=1, label=r'$\mu_o$')
+        plt.fill_between(sp_coord, sims_all_exp[i,:], sims_all_exp[i,:] - sims_all_std[i,:],
+                          color=colors[1], alpha=0.55, edgecolor='None', label=r'[$\mu_o$ + $\sigma_o$, $\mu_o$ - $\sigma_o$]')
+        plt.fill_between(sp_coord, sims_all_exp[i,:], sims_all_exp[i,:] + sims_all_std[i,:],
+                          color=colors[1], alpha=0.55, edgecolor='None')
+        plt.plot(sp_coord, observations[i,:], linestyle=':', color=colors[0], alpha=0.95, linewidth=2.5, label='Observations')
+        plt.ylabel('Groundwater head [m a.s.l]', fontsize=12)
+        plt.xlabel('Stress period', fontsize=12)
+        plt.xlim(0, sims_all.shape[2]-1)
+        plt.legend(edgecolor='black', fancybox=False, fontsize=8.5,
+                    borderpad=0.8, handletextpad=0.9, labelspacing=0.65)
+        plt.tight_layout()
+        plt.savefig(f'{save_dir}/uncertainty_{well}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+def plot_violin_prior_posterior(sims_all, pro_prior, obs_wells, save_dir='dream_plots_gwm'):
+    pass
+
+def plot_prior_posterior_density(prior_samples, posterior_samples, param_names, save_dir='dream_plots_gwm'):
+    """Plot density histograms and KDE curves for prior and posterior distributions."""
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    os.makedirs(save_dir, exist_ok=True)
+    for i, param_name in enumerate(param_names):
+        plt.figure(f'density_prior_posterior_{param_name}', figsize=(4,3))
+        # Density histograms
+        plt.hist(prior_samples[:,i], bins=30, density=True, alpha=0.4, color='orange', label="Prior (hist)")
+        plt.hist(posterior_samples[:,i], bins=30, density=True, alpha=0.4, color='blue', label="Posterior (hist)")
+        # KDE curves
+        sns.kdeplot(prior_samples[:,i], color='orange', lw=2, label="Prior (KDE)")
+        sns.kdeplot(posterior_samples[:,i], color='blue', lw=2, label="Posterior (KDE)")
+        plt.ylabel('Density', fontsize=12)
+        plt.xlabel(param_name)
+        plt.title(f'Density & KDE - {param_name}')
+        plt.legend(edgecolor='black', fancybox=False, fontsize=8.5,
+                    borderpad=0.8, handletextpad=0.9, labelspacing=0.65)
+        plt.tight_layout()
+        plt.savefig(f'{save_dir}/density_prior_posterior_{param_name}.png', dpi=300, bbox_inches='tight')
+        plt.close()
 def main():
     """Main function to run complete DREAM results analysis"""
+
+    """Main function to run complete DREAM results analysis"""
+
     print("Loading DREAM results for GWM model...")
-    
+    # Ensure di is imported in local scope
+    import dream_init_new as di
+
     # Load results
     results = load_dream_results('dream_GWM')
     if results is None:
         return
-    
+
     # Analyze convergence
     param_stats, results_converged = analyze_convergence(results, di.names)
-    
+
     if param_stats is None:
         print("Could not analyze convergence. Check your results file.")
         return
-    
+
     print("\nGenerating visualizations...")
-    
+
+
     # Generate all plots
     plot_parameter_traces(results, di.names)
     plot_parameter_distributions(results_converged, di.names, param_stats)
     plot_likelihood_evolution(results)
     plot_parameter_correlation(results_converged, di.names)
-    
+
+    # Improved prior/posterior density+KDE plots (now after results_converged is defined)
+    try:
+        param_distros = di.param_distros
+        numParams = len(param_distros)
+        rep = di.rep
+        np.random.seed(di.my_seed)
+        prior_samples = np.zeros((rep, numParams))
+        for i in range(rep):
+            gen_samples = spotpy.parameter.generate(param_distros)
+            for j in range(numParams):
+                prior_samples[i,j] = gen_samples[j][0]
+        posterior_samples = results_converged[[f'par{n}' for n in di.names]].values
+        plot_prior_posterior_density(prior_samples, posterior_samples, di.names)
+    except Exception as e:
+        print(f"[Optional] Could not plot prior/posterior density+KDE: {e}")
+
     # Generate summary table
     generate_summary_table(param_stats)
-    
+
     print("\nDREAM results analysis completed!")
     print("Check the 'dream_plots_gwm' directory for all generated plots and summary.")
+
+    # === Additional visualizations (if data available) ===
+    # 1. Overlayed prior/posterior histograms
+    # 2. Predictive uncertainty plots
+    # 3. Violin plots for prior/posterior predictive
+    try:
+        # Load prior samples and parameter distributions
+        import dream_init_new as di
+        # Generate prior samples (same shape as posterior)
+        param_distros = di.param_distros
+        numParams = len(param_distros)
+        rep = di.rep
+        np.random.seed(di.my_seed)
+        prior_samples = np.zeros((rep, numParams))
+        for i in range(rep):
+            gen_samples = spotpy.parameter.generate(param_distros)
+            for j in range(numParams):
+                prior_samples[i,j] = gen_samples[j][0]
+        # Posterior samples (after burn-in)
+        posterior_samples = results_converged[[f'par{n}' for n in di.names]].values
+        plot_prior_posterior_histograms(prior_samples, posterior_samples, di.names, param_distros)
+    except Exception as e:
+        print(f"[Optional] Could not plot prior/posterior histograms: {e}")
+
+    # Predictive uncertainty and violin plots (if model outputs and observations available)
+    try:
+        # Example: load model outputs and observations (user must adapt paths/format as needed)
+        # Here, we assume model outputs are in 'dream_GWM.csv' after parameter columns
+        # and observations in './obs/obs_values.csv' (user must adapt as needed)
+        import pandas as pd
+        data_results = pd.read_csv('dream_GWM.csv')
+        # Assume parameter columns are first len(di.names), outputs next, likelihood last
+        numParams = len(di.names)
+        # Example: outputs shape (n_samples, n_wells * n_times)
+        # User must adapt n_wells and n_times to their case
+        n_wells = 4
+        n_times = 300
+        sims_all = data_results.iloc[:, numParams:numParams+n_wells*n_times].to_numpy().reshape(-1, n_wells, n_times)
+        # Observations
+        obs_values = pd.read_csv('./obs/obs_values.csv', header=None).to_numpy().reshape(n_wells, n_times)
+        plot_predictive_uncertainty(sims_all, obs_values, [f'Well{i+1}' for i in range(n_wells)])
+        # Prior predictive (user must adapt path/format)
+        # Example: load prior predictive from npy file if available
+        import os
+        prior_pred_path = './inputs/prior/stored_sim_prior_random_from0_to250_seed1234.npy'
+        if os.path.exists(prior_pred_path):
+            pro_prior = np.load(prior_pred_path, allow_pickle=True)[:,1]
+            # This is just an example; user must adapt to match shape (n_prior, n_wells, n_times)
+            pro_prior = pro_prior.reshape(-1, n_wells, n_times)
+            plot_violin_prior_posterior(sims_all, pro_prior, [f'Well{i+1}' for i in range(n_wells)])
+    except Exception as e:
+        print(f"[Optional] Could not plot predictive uncertainty/violin plots: {e}")
 
 if __name__ == "__main__":
     main()
