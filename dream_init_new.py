@@ -55,11 +55,11 @@ ALL_PARAMETERS = {
 # =============================================================================
 
 # Example configurations:
-# For quick tests (3-5 parameters):
-UNCERTAIN_PARAMS_QUICK = ['hk3', 'hk4', 'hk5']
+# For quick tests (top 5 most sensitive parameters):
+UNCERTAIN_PARAMS_QUICK = ['hk4', 'hk3', 'hk5', 'hk1', 'Kriv_Muhlbach']
 
-# For medium complexity (8-10 parameters):
-UNCERTAIN_PARAMS_MEDIUM = ['hk1', 'hk2', 'hk3', 'sy1', 'sy2', 'D_Isar', 'Kriv_Isar', 'D_rch1', 'D_rch2']
+# For medium complexity (top 8 most sensitive parameters):
+UNCERTAIN_PARAMS_MEDIUM = ['hk4', 'hk3', 'hk5', 'hk1', 'Kriv_Muhlbach', 'hk2', 'D_rch2', 'Kriv_Griesbach']
 
 # For full complexity (all 19 parameters):
 UNCERTAIN_PARAMS_FULL = list(ALL_PARAMETERS.keys())
@@ -99,15 +99,15 @@ numParams = len(param_distros)
 # Suggested settings based on number of parameters
 if numParams <= 5:
     # Quick experiments - DREAM needs at least 2*numParams+1 chains
-    rep = 500
-    convEvals = 100
-    nChains = max(2*numParams + 1, 5)  # Ensure sufficient chains for DREAM
+    rep = 2000  # Increased from 500
+    convEvals = 300  # Increased from 100
+    nChains = max(2*numParams + 1, 8)  # Increased minimum chains
     experiment_type = "QUICK"
 elif numParams <= 10:
     # Medium experiments
-    rep = 5000
-    convEvals = 200
-    nChains = max(2*numParams + 1, 6)  # Ensure sufficient chains
+    rep = 8000  # Increased from 5000
+    convEvals = 500  # Increased from 200
+    nChains = max(2*numParams + 1, 10)  # Increased minimum chains
     experiment_type = "MEDIUM"
 else:
     # Full experiments

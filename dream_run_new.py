@@ -63,9 +63,13 @@ if __name__ == "__main__":
     print(f"  - Runs after convergence: {runs_after_convergence}")
     print(f"  - Random seed: {random_state}")
     
+    # Create timestamped database name
+    timestamp = time_start.strftime('%Y%m%d_%H%M%S')
+    dbname = f'dream_GWM_{timestamp}'
+    
     # initiate DREAM algorithm
     sampler = spotpy.algorithms.dream(spot_setup, 
-                                      dbname='dream_GWM', 
+                                      dbname=dbname, 
                                       dbformat='csv',
                                       db_precision=np.float32, 
                                       save_sim=True,
@@ -89,10 +93,10 @@ if __name__ == "__main__":
         # Alternative way to get results if getdata() fails
         import pandas as pd
         try:
-            results = pd.read_csv('dream_GWM.csv')
+            results = pd.read_csv(f'{dbname}.csv')
             print(f"Results loaded from CSV file: {len(results)} simulations")
         except FileNotFoundError:
-            print("Warning: Could not load results from sampler or CSV file")
+            print(f"Warning: Could not load results from sampler or CSV file ({dbname}.csv)")
             results = None   
     
     if results is not None:
@@ -131,6 +135,7 @@ The DREAM algorithm for GWM model finished.
 - Epsilon tolerance threshold:..... {epsilon}
 - Number of crossover values:...... {nCr}
 - Number of chains:................ {nChains}
+- Database name:................... {dbname}
 - Final R-hat value:............... {r_hat if r_hat is not None else 'Not converged'}
 
 Parameter names: {di.names}

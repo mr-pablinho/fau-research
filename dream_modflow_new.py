@@ -117,21 +117,32 @@ class spot_setup(object):
 
     def objectivefunction(self, simulation, evaluation, params=None):
         """
-        Define likelihood function for DREAM algorithm
+        Define likelihood function for DREAM algorithm with improved error handling
         """
         try:
             # Remove any NaN or invalid values
             valid_mask = ~(np.isnan(simulation) | np.isnan(evaluation) | 
                           np.isinf(simulation) | np.isinf(evaluation))
             
-            if np.sum(valid_mask) == 0:
-                return -1e10  # Very low likelihood for invalid simulations
+            if np.sum(valid_mask) < 10:  # Need minimum data points
+                return -1e10  # Very low likelihood for insufficient data
             
             sim_valid = simulation[valid_mask]
             obs_valid = evaluation[valid_mask]
             
-            # Use Gaussian likelihood with measurement error
-            like = spotpy.likelihoods.gaussianLikelihoodMeasErrorOut(obs_valid, sim_valid)
+            # Check for zero variance (constant observations)
+            if np.var(obs_valid) < 1e-10:
+                # Use Nash-Sutcliffe efficiency for constant observations
+                ss_res = np.sum((obs_valid - sim_valid) ** 2)
+                ss_tot = np.sum((obs_valid - np.mean(obs_valid)) ** 2) + 1e-10  # Avoid division by zero
+                nse = 1 - (ss_res / ss_tot)
+                like = max(nse, -10)  # Cap at reasonable range
+            else:
+                # Use Gaussian likelihood with measurement error for variable observations
+                like = spotpy.likelihoods.gaussianLikelihoodMeasErrorOut(obs_valid, sim_valid)
+            
+            # Ensure reasonable likelihood range
+            like = max(like, -1e6)
             return like
             
         except Exception as e:

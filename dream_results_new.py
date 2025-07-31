@@ -14,7 +14,15 @@ import seaborn as sns
 from scipy import stats
 import spotpy
 import os
+from datetime import datetime
 import dream_init_new as di
+
+def create_timestamped_dir(base_name='dream_plots_gwm'):
+    """Create a directory with timestamp"""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    dir_name = f"{base_name}_{timestamp}"
+    os.makedirs(dir_name, exist_ok=True)
+    return dir_name
 
 def load_dream_results(dbname='dream_GWM'):
     """Load DREAM results from CSV file"""
@@ -263,9 +271,7 @@ def plot_prior_posterior_density(prior_samples, posterior_samples, param_names, 
         plt.tight_layout()
         plt.savefig(f'{save_dir}/density_prior_posterior_{param_name}.png', dpi=300, bbox_inches='tight')
         plt.close()
-def main():
-    """Main function to run complete DREAM results analysis"""
-
+def main(dbname='dream_GWM'):
     """Main function to run complete DREAM results analysis"""
 
     print("Loading DREAM results for GWM model...")
@@ -273,7 +279,7 @@ def main():
     import dream_init_new as di
 
     # Load results
-    results = load_dream_results('dream_GWM')
+    results = load_dream_results(dbname)
     if results is None:
         return
 
@@ -285,13 +291,16 @@ def main():
         return
 
     print("\nGenerating visualizations...")
-
+    
+    # Create timestamped directory for plots
+    save_dir = create_timestamped_dir('dream_plots_gwm')
+    print(f"Saving plots to: {save_dir}")
 
     # Generate all plots
-    plot_parameter_traces(results, di.names)
-    plot_parameter_distributions(results_converged, di.names, param_stats)
-    plot_likelihood_evolution(results)
-    plot_parameter_correlation(results_converged, di.names)
+    plot_parameter_traces(results, di.names, save_dir)
+    plot_parameter_distributions(results_converged, di.names, param_stats, save_dir)
+    plot_likelihood_evolution(results, save_dir)
+    plot_parameter_correlation(results_converged, di.names, save_dir)
 
     # Improved prior/posterior density+KDE plots (now after results_converged is defined)
     try:
@@ -305,15 +314,15 @@ def main():
             for j in range(numParams):
                 prior_samples[i,j] = gen_samples[j][0]
         posterior_samples = results_converged[[f'par{n}' for n in di.names]].values
-        plot_prior_posterior_density(prior_samples, posterior_samples, di.names)
+        plot_prior_posterior_density(prior_samples, posterior_samples, di.names, save_dir)
     except Exception as e:
         print(f"[Optional] Could not plot prior/posterior density+KDE: {e}")
 
     # Generate summary table
-    generate_summary_table(param_stats)
+    generate_summary_table(param_stats, save_dir)
 
     print("\nDREAM results analysis completed!")
-    print("Check the 'dream_plots_gwm' directory for all generated plots and summary.")
+    print(f"Check the '{save_dir}' directory for all generated plots and summary.")
 
     # === Additional visualizations (if data available) ===
     # 1. Overlayed prior/posterior histograms

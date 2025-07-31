@@ -8,6 +8,7 @@ import numpy as np
 import flopy.utils.binaryfile as bf
 from flopy.utils import HeadFile
 import matplotlib.pyplot as plt
+from datetime import datetime
 # from shapely.geometry import Point
 
 def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kriv_Muhlbach, Kriv_Giessen, Kriv_Griesbach, Kriv_Schwabinger_Bach, Kriv_Wiesackerbach, D_rch1, D_rch2, custom_out_dir=None):
@@ -22,7 +23,9 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
     if custom_out_dir is not None:
         out_dir = custom_out_dir
     else:
-        out_dir = os.path.join('Output2')
+        # Create timestamped output directory
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        out_dir = os.path.join(f'Output2_{timestamp}')
 
     os.makedirs(in_dir, exist_ok=True)
     os.makedirs(out_dir, exist_ok=True)
