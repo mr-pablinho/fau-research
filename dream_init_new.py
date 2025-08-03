@@ -5,7 +5,7 @@ Dataset and algorithms for the probabilistic assessment of groundwater flooding 
 Adapted for new Garching GWM model (2025)
 @author: Pablo Merchán-Rivera
 
-DREAM initial values for new model with updated parameters
+DREAM initial values for new model with dynamic parameter selection
 """
 
 # %% Import libraries
@@ -13,62 +13,132 @@ DREAM initial values for new model with updated parameters
 import spotpy
 import numpy as np
 
+# %% Load deterministic parameter values from params.py
+
+# Import deterministic values and ranges from params.py
+try:
+    import params
+    
+    # Extract parameter definitions: (default_value, [min_range, max_range])
+    param_definitions = {
+        'hk1': params.hk1,
+        'hk2': params.hk2, 
+        'hk3': params.hk3,
+        'hk4': params.hk4,
+        'hk5': params.hk5,
+        'sy1': params.sy1,
+        'sy2': params.sy2,
+        'sy3': params.sy3,
+        'sy4': params.sy4,
+        'sy5': params.sy5,
+        'D_Isar': params.D_Isar,
+        'Kriv_Isar': params.Kriv_Isar,
+        'Kriv_Muhlbach': params.Kriv_Muhlbach,
+        'Kriv_Giessen': params.Kriv_Giessen,
+        'Kriv_Griesbach': params.Kriv_Griesbach,
+        'Kriv_Schwabinger_Bach': params.Kriv_Schwabinger_Bach,
+        'Kriv_Wiesackerbach': params.Kriv_Wiesackerbach,
+        'D_rch1': params.D_rch1,
+        'D_rch2': params.D_rch2
+    }
+except ImportError:
+    print("Warning: params.py not found, using default parameter definitions")
+    # Fallback parameter definitions if params.py is not available
+    param_definitions = {
+        'hk1': (5000, [100, 10000]),
+        'hk2': (3000, [100, 10000]),
+        'hk3': (4000, [100, 10000]),
+        'hk4': (2000, [100, 10000]),
+        'hk5': (1500, [100, 10000]),
+        'sy1': (0.2, [0.05, 0.35]),
+        'sy2': (0.15, [0.05, 0.35]),
+        'sy3': (0.25, [0.05, 0.35]),
+        'sy4': (0.18, [0.05, 0.35]),
+        'sy5': (0.12, [0.05, 0.35]),
+        'D_Isar': (0.0, [-0.5, 0.5]),
+        'Kriv_Isar': (500, [10, 1000]),
+        'Kriv_Muhlbach': (200, [10, 1000]),
+        'Kriv_Giessen': (150, [10, 1000]),
+        'Kriv_Griesbach': (100, [10, 1000]),
+        'Kriv_Schwabinger_Bach': (80, [10, 1000]),
+        'Kriv_Wiesackerbach': (60, [10, 1000]),
+        'D_rch1': (1.5, [0, 3]),
+        'D_rch2': (0.5, [0, 1])
+    }
+
+# %% Dynamic parameter selection
+
+# CONFIGURE WHICH PARAMETERS TO CALIBRATE HERE
+CALIBRATE_PARAMS = [
+    'hk3',
+    'hk4',
+]
+
+print(f"DREAM will calibrate {len(CALIBRATE_PARAMS)} parameters: {CALIBRATE_PARAMS}")
+
 # %% Setup random state for the whole process
    
 # set the random state
 my_seed = 246
 np.random.seed(my_seed)
 
-# parameter distributions for the new model
-# Based on GWM function signature: hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, 
-#                                  D_Isar, Kriv_Isar, Kriv_Muhlbach, Kriv_Giessen, 
-#                                  Kriv_Griesbach, Kriv_Schwabinger_Bach, Kriv_Wiesackerbach, 
-#                                  D_rch1, D_rch2
+# %% Create parameter distributions dynamically
 
-names = ['hk1', 'hk2', 'hk3', 'hk4', 'hk5', 
-         'sy1', 'sy2', 'sy3', 'sy4', 'sy5',
-         'D_Isar', 'Kriv_Isar', 'Kriv_Muhlbach', 'Kriv_Giessen', 
-         'Kriv_Griesbach', 'Kriv_Schwabinger_Bach', 'Kriv_Wiesackerbach',
-         'D_rch1', 'D_rch2']
+# Parameters that use log-transformation (conductivities)
+LOG_TRANSFORM_PARAMS = ['hk1', 'hk2', 'hk3', 'hk4', 'hk5', 
+                       'Kriv_Isar', 'Kriv_Muhlbach', 'Kriv_Giessen', 
+                       'Kriv_Griesbach', 'Kriv_Schwabinger_Bach', 'Kriv_Wiesackerbach']
 
-# Define parameter distributions based on physical constraints and typical groundwater modeling ranges
-param_distros = [
-    # Hydraulic conductivity parameters (m/d) - log-uniform distribution
-    spotpy.parameter.Uniform(names[0], low=np.log10(1e-3), high=np.log10(1e2)),  # hk1
-    spotpy.parameter.Uniform(names[1], low=np.log10(1e-3), high=np.log10(1e2)),  # hk2
-    spotpy.parameter.Uniform(names[2], low=np.log10(1e-3), high=np.log10(1e2)),  # hk3
-    spotpy.parameter.Uniform(names[3], low=np.log10(1e-3), high=np.log10(1e2)),  # hk4
-    spotpy.parameter.Uniform(names[4], low=np.log10(1e-3), high=np.log10(1e2)),  # hk5
-    
-    # Specific yield parameters (-) - linear distribution
-    spotpy.parameter.Uniform(names[5], low=0.05, high=0.40),   # sy1
-    spotpy.parameter.Uniform(names[6], low=0.05, high=0.40),   # sy2
-    spotpy.parameter.Uniform(names[7], low=0.05, high=0.40),   # sy3
-    spotpy.parameter.Uniform(names[8], low=0.05, high=0.40),   # sy4
-    spotpy.parameter.Uniform(names[9], low=0.05, high=0.40),   # sy5
-    
-    # Stage adjustment for Isar river (m)
-    spotpy.parameter.Uniform(names[10], low=-2.0, high=2.0),   # D_Isar
-    
-    # River bed conductance parameters (m2/d) - log-uniform distribution
-    spotpy.parameter.Uniform(names[11], low=np.log10(1e-6), high=np.log10(1e-1)),  # Kriv_Isar
-    spotpy.parameter.Uniform(names[12], low=np.log10(1e-6), high=np.log10(1e-1)),  # Kriv_Muhlbach
-    spotpy.parameter.Uniform(names[13], low=np.log10(1e-6), high=np.log10(1e-1)),  # Kriv_Giessen
-    spotpy.parameter.Uniform(names[14], low=np.log10(1e-6), high=np.log10(1e-1)),  # Kriv_Griesbach
-    spotpy.parameter.Uniform(names[15], low=np.log10(1e-6), high=np.log10(1e-1)),  # Kriv_Schwabinger_Bach
-    spotpy.parameter.Uniform(names[16], low=np.log10(1e-6), high=np.log10(1e-1)),  # Kriv_Wiesackerbach
-    
-    # Recharge scaling factors (-)
-    spotpy.parameter.Uniform(names[17], low=0.1, high=3.0),    # D_rch1 (background recharge)
-    spotpy.parameter.Uniform(names[18], low=0.1, high=3.0),    # D_rch2 (urban recharge)
-]
+# Build parameter names and distributions for only the calibrated parameters
+names = []
+param_distros = []
+deterministic_values = {}
 
-# number of repetitions and chains
-rep = 1000  # Reduced from 10000 for initial testing
+for param_name in CALIBRATE_PARAMS:
+    default_val, (min_val, max_val) = param_definitions[param_name]
+    
+    names.append(param_name)
+    
+    if param_name in LOG_TRANSFORM_PARAMS:
+        # Use log-uniform distribution for conductivity parameters
+        low_bound = np.log10(min_val)
+        high_bound = np.log10(max_val)
+        param_distros.append(spotpy.parameter.Uniform(param_name, low=low_bound, high=high_bound))
+        print(f"  {param_name}: log-uniform [{min_val:.1e}, {max_val:.1e}] m/d (default: {default_val:.1e})")
+    else:
+        # Use linear distribution for other parameters
+        param_distros.append(spotpy.parameter.Uniform(param_name, low=min_val, high=max_val))
+        print(f"  {param_name}: uniform [{min_val}, {max_val}] (default: {default_val})")
+
+# Store deterministic values for all parameters (both calibrated and fixed)
+for param_name, (default_val, _) in param_definitions.items():
+    deterministic_values[param_name] = default_val
+
+print(f"\nDeterministic values for fixed parameters:")
+fixed_params = [p for p in param_definitions.keys() if p not in CALIBRATE_PARAMS]
+for param_name in fixed_params:
+    default_val = deterministic_values[param_name]
+    if param_name in LOG_TRANSFORM_PARAMS:
+        print(f"  {param_name}: {default_val:.1e}")
+    else:
+        print(f"  {param_name}: {default_val}")
+
+# %% DREAM algorithm settings
+
+# number of repetitions and chains (reduced for initial testing with fewer parameters)
+rep = 50  # Increased for better results
 numSamples = rep
-convEvals = 100  # Reduced from 300
+convEvals = 20  # Increased convergence evaluations
 numParams = len(param_distros)
-nChains = 3  # Reduced from 6 for faster testing
+# DREAM needs at least 2*numParams+1 chains for proper operation
+# Based on SPOTPY warning, we need even more chains
+nChains = max(7, 2*numParams + 1)  # Increased minimum chains for DREAM algorithm
+
+print(f"\nDREAM settings:")
+print(f"  Parameters to calibrate: {numParams}")
+print(f"  Repetitions: {rep}")
+print(f"  Chains: {nChains} (minimum required: {2*numParams + 1})")
+print(f"  Convergence evaluations: {convEvals}")
 
 # Generate initial samples for parameter space exploration
 samples = np.zeros((numSamples, numParams))
@@ -78,4 +148,4 @@ for i in range(numSamples):
         samples[i,j] = gen_samples[j][0]        
 
 # Create unique identifier for this run
-flag = 'dream-r%d-c%d-s%d' % (rep, convEvals, my_seed)
+flag = 'dream-r%d-c%d-p%d-s%d' % (rep, convEvals, numParams, my_seed)

@@ -36,40 +36,56 @@ class spot_setup(object):
 
     def simulation(self, x):
         
-        # Transform log-space parameters back to linear space
-        hk1 = 10**x[0]
-        hk2 = 10**x[1] 
-        hk3 = 10**x[2]
-        hk4 = 10**x[3]
-        hk5 = 10**x[4]
+        # Get parameter definitions and calibration settings from dream_init_new
+        param_names = di.CALIBRATE_PARAMS
+        deterministic_vals = di.deterministic_values
+        log_transform_params = di.LOG_TRANSFORM_PARAMS
         
-        # Specific yield parameters (already in linear space)
-        sy1 = x[5]
-        sy2 = x[6]
-        sy3 = x[7]
-        sy4 = x[8]
-        sy5 = x[9]
+        # Start with deterministic values for all parameters
+        param_values = deterministic_vals.copy()
         
-        # Stage adjustment for Isar river
-        D_Isar = x[10]
+        # Update with calibrated parameter values
+        for i, param_name in enumerate(param_names):
+            if param_name in log_transform_params:
+                # Transform log-space parameters back to linear space
+                param_values[param_name] = 10**x[i]
+            else:
+                # Use linear space parameters directly
+                param_values[param_name] = x[i]
         
-        # Transform log-space river conductance parameters back to linear space
-        Kriv_Isar = 10**x[11]
-        Kriv_Muhlbach = 10**x[12]
-        Kriv_Giessen = 10**x[13]
-        Kriv_Griesbach = 10**x[14]
-        Kriv_Schwabinger_Bach = 10**x[15]
-        Kriv_Wiesackerbach = 10**x[16]
+        # Extract all parameter values in the order expected by GWM function
+        hk1 = param_values['hk1']
+        hk2 = param_values['hk2'] 
+        hk3 = param_values['hk3']
+        hk4 = param_values['hk4']
+        hk5 = param_values['hk5']
         
-        # Recharge scaling factors
-        D_rch1 = x[17]
-        D_rch2 = x[18]
+        sy1 = param_values['sy1']
+        sy2 = param_values['sy2']
+        sy3 = param_values['sy3']
+        sy4 = param_values['sy4']
+        sy5 = param_values['sy5']
+        
+        D_Isar = param_values['D_Isar']
+        
+        Kriv_Isar = param_values['Kriv_Isar']
+        Kriv_Muhlbach = param_values['Kriv_Muhlbach']
+        Kriv_Giessen = param_values['Kriv_Giessen']
+        Kriv_Griesbach = param_values['Kriv_Griesbach']
+        Kriv_Schwabinger_Bach = param_values['Kriv_Schwabinger_Bach']
+        Kriv_Wiesackerbach = param_values['Kriv_Wiesackerbach']
+        
+        D_rch1 = param_values['D_rch1']
+        D_rch2 = param_values['D_rch2']
+        
+        # Print calibrated parameter values for debugging
+        print(f"Calibrating: {', '.join([f'{p}={param_values[p]:.2e}' if p in log_transform_params else f'{p}={param_values[p]:.3f}' for p in param_names])}")
         
         try:
             # Create a unique temporary directory for this simulation
             temp_dir = tempfile.mkdtemp(prefix='dream_sim_')
             
-            # Run the GWM model with transformed parameters
+            # Run the GWM model with parameter values
             model, out_dir = gwm.GWM(
                 hk1=hk1, hk2=hk2, hk3=hk3, hk4=hk4, hk5=hk5,
                 sy1=sy1, sy2=sy2, sy3=sy3, sy4=sy4, sy5=sy5,

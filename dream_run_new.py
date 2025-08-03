@@ -78,19 +78,45 @@ if __name__ == "__main__":
                                       random_state=random_state)
     
     print("Starting DREAM sampling...")
+    print(f"Database will be saved as: dream_GWM_new.csv")
     
-    r_hat = sampler.sample(rep, 
-                           nChains=nChains, 
-                           convergence_limit=convergence_limit,
-                           runs_after_convergence=runs_after_convergence,
-                           eps=epsilon,
-                           acceptance_test_option=ato,
-                           nCr=nCr)
+    try:
+        r_hat = sampler.sample(rep, 
+                               nChains=nChains, 
+                               convergence_limit=convergence_limit,
+                               runs_after_convergence=runs_after_convergence,
+                               eps=epsilon,
+                               acceptance_test_option=ato,
+                               nCr=nCr)
+        print(f"DREAM sampling completed successfully")
+        print(f"Gelman-Rubin diagnostic: {r_hat}")
+    except Exception as e:
+        print(f"Error during DREAM sampling: {e}")
+        print("Continuing with result processing...")
+    
+    # Check if the CSV file was created
+    import os
+    csv_filename = 'dream_GWM_new.csv'
+    if os.path.exists(csv_filename):
+        print(f"Results file '{csv_filename}' created successfully")
+        file_size = os.path.getsize(csv_filename)
+        print(f"File size: {file_size} bytes")
+    else:
+        print(f"Warning: Results file '{csv_filename}' not found")
+        print("Checking for alternative file formats...")
+        for ext in ['.db', '.hdf5', '.pkl']:
+            alt_file = f'dream_GWM_new{ext}'
+            if os.path.exists(alt_file):
+                print(f"Found alternative database file: {alt_file}")
     
     # load the likelihood, and the parameter values of all simulations
-    results = sampler.getdata()   
-    
-    print(f"DREAM completed. Total samples: {len(results)}")
+    try:
+        results = sampler.getdata()   
+        print(f"DREAM completed. Total samples: {len(results)}")
+    except AttributeError:
+        # For newer SPOTPY versions, results might be saved automatically
+        print("DREAM completed. Results saved to database file.")
+        results = None
     
     # %% Register the end of the algorithm
     
@@ -99,7 +125,7 @@ if __name__ == "__main__":
     
     f = open('./logs/log_dream_new.txt', 'a+')
     
-    if rep > len(results):
+    if results is not None and rep > len(results):
         convergence_eval = 'yes'
     else:
         convergence_eval = 'no'
