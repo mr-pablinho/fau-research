@@ -20,10 +20,6 @@ import os
 # Create logs directory if it doesn't exist
 os.makedirs('logs', exist_ok=True)
 
-# reinitiate log file
-f = open('./logs/log_dream_new.txt', 'w')
-f.close()
-
 # %% Run DREAM algorithm
 
 if __name__ == "__main__":
@@ -69,16 +65,23 @@ if __name__ == "__main__":
     print(f"  - Runs after convergence: {runs_after_convergence}")
     print(f"  - Random seed: {random_state}")
     
+    # Create timestamped filenames
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_filename = f'dream_GWM_{timestamp}'
+    csv_filename = f'{base_filename}.csv'
+    log_filename = f'./logs/log_dream_{timestamp}.txt'
+    
     # initiate DREAM algorithm
     sampler = spotpy.algorithms.dream(spot_setup, 
-                                      dbname='dream_GWM_new', 
+                                      dbname=base_filename, 
                                       dbformat='csv',
                                       db_precision=np.float32, 
                                       save_sim=True,
                                       random_state=random_state)
     
     print("Starting DREAM sampling...")
-    print(f"Database will be saved as: dream_GWM_new.csv")
+    print(f"Database will be saved as: {csv_filename}")
+    print(f"Log will be saved as: {log_filename}")
     
     try:
         r_hat = sampler.sample(rep, 
@@ -96,7 +99,6 @@ if __name__ == "__main__":
     
     # Check if the CSV file was created
     import os
-    csv_filename = 'dream_GWM_new.csv'
     if os.path.exists(csv_filename):
         print(f"Results file '{csv_filename}' created successfully")
         file_size = os.path.getsize(csv_filename)
@@ -105,7 +107,7 @@ if __name__ == "__main__":
         print(f"Warning: Results file '{csv_filename}' not found")
         print("Checking for alternative file formats...")
         for ext in ['.db', '.hdf5', '.pkl']:
-            alt_file = f'dream_GWM_new{ext}'
+            alt_file = f'{base_filename}{ext}'
             if os.path.exists(alt_file):
                 print(f"Found alternative database file: {alt_file}")
     
@@ -123,7 +125,8 @@ if __name__ == "__main__":
     time_end = datetime.now()
     time_end_string = time_end.strftime("%d/%m/%Y %H:%M:%S")  # dd/mm/YY H:M:S
     
-    f = open('./logs/log_dream_new.txt', 'a+')
+    # Initialize log file with timestamp
+    f = open(log_filename, 'w')
     
     if results is not None and rep > len(results):
         convergence_eval = 'yes'
@@ -163,6 +166,6 @@ Parameter names:
     f.write(summary)
     f.close()
     
-    print(f"Log saved to './logs/log_dream_new.txt'")
-    print(f"Results saved to 'dream_GWM_new.csv'")
+    print(f"Log saved to '{log_filename}'")
+    print(f"Results saved to '{csv_filename}'")
     print(summary)

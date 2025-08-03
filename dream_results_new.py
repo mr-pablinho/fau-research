@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 import dream_init_new as di
 from scipy.stats import skew, kurtosis
 import os
+import re
+from datetime import datetime
 
 # %% Parameter name mappings for plotting
 
@@ -64,6 +66,18 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
     if not os.path.exists(results_file):
         print(f"Results file {results_file} not found. Please run the DREAM algorithm first.")
         return None, None, None
+    
+    # Extract timestamp from filename for output files
+    timestamp_match = re.search(r'dream_GWM_(\d{8}_\d{6})\.csv', results_file)
+    if timestamp_match:
+        timestamp = timestamp_match.group(1)
+        output_suffix = f"_{timestamp}"
+    else:
+        # Fallback to current timestamp if no timestamp in filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_suffix = f"_{timestamp}"
+    
+    print(f"Output files will use timestamp: {timestamp}")
     
     # Set random seed for reproducibility
     np.random.seed(di.my_seed) 
@@ -144,23 +158,23 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
             print(f"  {name}: {value:.4f}")
     
     # Create results summary table
-    create_results_table(params_stats, param_names_to_use, actual_convergence_evals)
+    create_results_table(params_stats, param_names_to_use, actual_convergence_evals, output_suffix)
     
     # Plot parameter evolution (traces)
-    plot_parameter_traces(results_array, likelihood, param_names_to_use)
+    plot_parameter_traces(results_array, likelihood, param_names_to_use, output_suffix)
     
     # Plot parameter distributions (prior vs posterior)
-    plot_parameter_distributions(params_new_con, param_names_to_use, actual_convergence_evals)
+    plot_parameter_distributions(params_new_con, param_names_to_use, actual_convergence_evals, output_suffix)
     
     # Plot likelihood evolution
-    plot_likelihood_evolution(likelihood)
+    plot_likelihood_evolution(likelihood, output_suffix)
     
     # Plot parameter correlations
-    plot_parameter_correlations(params_new_con, param_names_to_use)
+    plot_parameter_correlations(params_new_con, param_names_to_use, output_suffix)
     
     return params_stats, best_set, likelihood
 
-def create_results_table(params_stats, param_names, convergence_evals):
+def create_results_table(params_stats, param_names, convergence_evals, output_suffix=""):
     """Create a summary table of parameter statistics"""
     
     results_df = pd.DataFrame({
@@ -173,13 +187,14 @@ def create_results_table(params_stats, param_names, convergence_evals):
         'Kurtosis': params_stats['kurt_con']
     })
     
-    # Save table
-    results_df.to_csv('dream_parameters_summary.csv', index=False)
-    print(f"\\nParameter summary saved to 'dream_parameters_summary.csv'")
+    # Save table with timestamp
+    filename = f'dream_parameters_summary{output_suffix}.csv'
+    results_df.to_csv(filename, index=False)
+    print(f"\\nParameter summary saved to '{filename}'")
     
     return results_df
 
-def plot_parameter_traces(results_array, likelihood, param_names):
+def plot_parameter_traces(results_array, likelihood, param_names, output_suffix=""):
     """Plot parameter evolution over DREAM iterations"""
     
     numParams = results_array.shape[1]
@@ -206,21 +221,11 @@ def plot_parameter_traces(results_array, likelihood, param_names):
         fig.delaxes(axes[i])
     
     plt.tight_layout()
-    plt.savefig('dream_parameter_traces.png', dpi=300, bbox_inches='tight')
-    plt.close()  # Close the figure to free memory
-    
-    # Plot likelihood evolution
-    plt.figure(figsize=(10, 6))
-    plt.plot(likelihood, alpha=0.8, linewidth=1.0, color='darkred')
-    plt.title('Likelihood Evolution')
-    plt.xlabel('Iteration')
-    plt.ylabel('Log-Likelihood')
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig('dream_likelihood_evolution.png', dpi=300, bbox_inches='tight')
+    filename = f'dream_parameter_traces{output_suffix}.png'
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()  # Close the figure to free memory
 
-def plot_parameter_distributions(params_converged, param_names, convergence_evals):
+def plot_parameter_distributions(params_converged, param_names, convergence_evals, output_suffix=""):
     """Plot parameter distributions comparing prior and posterior"""
     
     numParams = params_converged.shape[1]
@@ -269,10 +274,11 @@ def plot_parameter_distributions(params_converged, param_names, convergence_eval
         fig.delaxes(axes[i])
     
     plt.tight_layout()
-    plt.savefig('dream_parameter_distributions.png', dpi=300, bbox_inches='tight')
+    filename = f'dream_parameter_distributions{output_suffix}.png'
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()  # Close the figure to free memory
 
-def plot_likelihood_evolution(likelihood):
+def plot_likelihood_evolution(likelihood, output_suffix=""):
     """Plot likelihood evolution"""
     
     plt.figure(figsize=(12, 8))
@@ -295,10 +301,11 @@ def plot_likelihood_evolution(likelihood):
     plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('dream_objective_evolution.png', dpi=300, bbox_inches='tight')
+    filename = f'dream_objective_evolution{output_suffix}.png'
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()  # Close the figure to free memory
 
-def plot_parameter_correlations(params_converged, param_names):
+def plot_parameter_correlations(params_converged, param_names, output_suffix=""):
     """Plot parameter correlation matrix"""
     
     # Calculate correlation matrix
@@ -328,28 +335,48 @@ def plot_parameter_correlations(params_converged, param_names):
     
     plt.title('Parameter Correlation Matrix', fontsize=14)
     plt.tight_layout()
-    plt.savefig('dream_parameter_correlation.png', dpi=300, bbox_inches='tight')
+    filename = f'dream_parameter_correlation{output_suffix}.png'
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()  # Close the figure to free memory
 
 # %% Main execution
 
 if __name__ == "__main__":
     
+    # Look for the most recent DREAM results file
+    import glob
+    dream_files = glob.glob('dream_GWM_*.csv')
+    if not dream_files:
+        print("No DREAM results files found. Please run the DREAM algorithm first (dream_run_new.py)")
+        exit(1)
+    
+    # Sort by modification time and get the most recent
+    most_recent_file = max(dream_files, key=os.path.getmtime)
+    print(f"Using most recent results file: {most_recent_file}")
+    
+    # Extract timestamp for output directory
+    timestamp_match = re.search(r'dream_GWM_(\d{8}_\d{6})\.csv', most_recent_file)
+    if timestamp_match:
+        timestamp = timestamp_match.group(1)
+        output_dir = f'dream_plots_{timestamp}'
+    else:
+        output_dir = 'dream_plots_new'
+    
     # Create output directory for plots
-    os.makedirs('dream_plots_new', exist_ok=True)
-    os.chdir('dream_plots_new')
+    os.makedirs(output_dir, exist_ok=True)
+    os.chdir(output_dir)
     
     # Analyze results (adjust convergence_evals based on your needs)
     convergence_evals = 1000  # Number of final samples to consider converged
     
     try:
         stats, best_params, likelihood = analyze_dream_results(
-            results_file='../dream_GWM_new.csv', 
+            results_file=f'../{most_recent_file}', 
             convergence_evals=convergence_evals
         )
         
         print("\\nAnalysis completed successfully!")
-        print(f"Plots saved in 'dream_plots_new' directory")
+        print(f"Plots saved in '{output_dir}' directory")
         
     except Exception as e:
         print(f"Error during analysis: {e}")

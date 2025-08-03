@@ -12,6 +12,7 @@ DREAM initial values for new model with dynamic parameter selection
 
 import spotpy
 import numpy as np
+from datetime import datetime
 
 # %% Load deterministic parameter values from params.py
 
@@ -152,4 +153,5 @@ for i in range(numSamples):
         samples[i,j] = gen_samples[j][0]        
 
 # Create unique identifier for this run
-flag = 'dream-r%d-c%d-p%d-s%d' % (rep, convEvals, numParams, my_seed)
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+flag = 'dream-r%d-c%d-p%d-s%d-%s' % (rep, convEvals, numParams, my_seed, timestamp)
