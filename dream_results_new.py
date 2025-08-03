@@ -1,223 +1,304 @@
 # -*- coding: utf-8 -*-
 """
-DREAM results analysis and visualization for new GWM model
-Adapted from bayes2022 DREAM experiment
-@author: Pablo Merchán-Rivera (adapted)
+Research: A Bayesian Framework to Assess and Create Maps of Groundwater Flooding
+Dataset and algorithms for the probabilistic assessment of groundwater flooding occurrence
+Adapted for new Garching GWM model (2025)
+@author: Pablo Merchán-Rivera
 
-Analysis and visualization of DREAM results for new GWM groundwater model
+Evaluate DREAM results for new model
 """
+
+# %% Import libraries
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy import stats
-import spotpy
-import os
 import dream_init_new as di
+from scipy.stats import skew, kurtosis
+import os
 
-def load_dream_results(dbname='dream_GWM'):
-    """Load DREAM results from CSV file"""
-    try:
-        results = pd.read_csv(f'{dbname}.csv')
-        return results
-    except FileNotFoundError:
-        print(f"Results file {dbname}.csv not found. Run DREAM algorithm first.")
-        return None
+# %% Parameter name mappings for plotting
 
-def analyze_convergence(results, param_names, burnin_fraction=0.5):
-    """Analyze convergence of DREAM chains"""
-    if results is None:
+# Short names for plot titles
+params_names_short = ['hk1', 'hk2', 'hk3', 'hk4', 'hk5', 
+                     'sy1', 'sy2', 'sy3', 'sy4', 'sy5',
+                     'D_Isar', 'Kriv_Isar', 'Kriv_Muhlbach', 'Kriv_Giessen',
+                     'Kriv_Griesbach', 'Kriv_Schwabinger_Bach', 'Kriv_Wiesackerbach',
+                     'D_rch1', 'D_rch2']
+
+# Full names for plot labels
+params_names_full = ['Hydraulic Conductivity Zone 1 (m/d)', 
+                    'Hydraulic Conductivity Zone 2 (m/d)',
+                    'Hydraulic Conductivity Zone 3 (m/d)',
+                    'Hydraulic Conductivity Zone 4 (m/d)',
+                    'Hydraulic Conductivity Zone 5 (m/d)',
+                    'Specific Yield Zone 1 (-)',
+                    'Specific Yield Zone 2 (-)',
+                    'Specific Yield Zone 3 (-)',
+                    'Specific Yield Zone 4 (-)',
+                    'Specific Yield Zone 5 (-)',
+                    'Isar Stage Adjustment (m)',
+                    'Isar River Conductance (m²/d)',
+                    'Muhlbach River Conductance (m²/d)',
+                    'Giessen River Conductance (m²/d)',
+                    'Griesbach River Conductance (m²/d)',
+                    'Schwabinger Bach Conductance (m²/d)',
+                    'Wiesackerbach River Conductance (m²/d)',
+                    'Background Recharge Multiplier (-)',
+                    'Urban Recharge Multiplier (-)']
+
+# Color definitions
+colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+
+# %% Evaluate results
+
+def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=1000):
+    """
+    Analyze DREAM results for the new GWM model
+    
+    Parameters:
+    - results_file: CSV file containing DREAM results
+    - convergence_evals: Number of final samples to consider as converged
+    """
+    
+    if not os.path.exists(results_file):
+        print(f"Results file {results_file} not found. Please run the DREAM algorithm first.")
         return
     
-    # Remove burn-in period
-    burnin_idx = int(len(results) * burnin_fraction)
-    results_converged = results.iloc[burnin_idx:]
+    # Set random seed for reproducibility
+    np.random.seed(di.my_seed) 
     
-    print(f"Total simulations: {len(results)}")
-    print(f"After burn-in ({burnin_fraction*100}%): {len(results_converged)}")
+    print(f"Analyzing DREAM results from {results_file}")
+    print(f"Using last {convergence_evals} samples for convergence analysis")
     
-    # Calculate basic statistics for each parameter
-    param_stats = {}
-    for i, param_name in enumerate(param_names):
-        param_col = f'par{param_name}'
-        if param_col in results_converged.columns:
-            param_data = results_converged[param_col].values
-            param_stats[param_name] = {
-                'mean': np.mean(param_data),
-                'std': np.std(param_data),
-                'median': np.median(param_data),
-                'q025': np.percentile(param_data, 2.5),
-                'q975': np.percentile(param_data, 97.5)
-            }
+    # Import DREAM results
+    data_results = pd.read_csv(results_file)
+    print(f"Total samples in results: {len(data_results)}")
     
-    return param_stats, results_converged
+    # Extract parameters and likelihood
+    numParams = len(di.param_distros)
+    results_array = np.zeros((len(data_results), numParams))
+    for i in range(numParams):
+        results_array[:,i] = data_results.iloc[:,i+1]
+        
+    likelihood = np.array(data_results.iloc[:,0])
+    
+    # Extract estimated parameters (all samples vs converged samples)
+    params_new_all = data_results.to_numpy()[:,1:numParams+1]
+    params_new_con = params_new_all[-convergence_evals:,:]
+    
+    # Compute statistics
+    params_stats = {}
+    params_stats['mean_all'] = np.mean(params_new_all, axis=0)
+    params_stats['std_all'] = np.std(params_new_all, axis=0)
+    params_stats['mean_con'] = np.mean(params_new_con, axis=0)
+    params_stats['std_con'] = np.std(params_new_con, axis=0)
+    params_stats['skew_con'] = skew(params_new_con, axis=0)
+    params_stats['kurt_con'] = kurtosis(params_new_con, axis=0)
+    
+    # Find best parameter set
+    best_set_loc = data_results['like1'].idxmax()
+    best_set = data_results.iloc[best_set_loc, 1:numParams+1].values
+    best_likelihood = data_results.iloc[best_set_loc, 0]
+    
+    print(f"\\nBest likelihood: {best_likelihood:.4f}")
+    print("Best parameter set:")
+    for i, (name, value) in enumerate(zip(params_names_short, best_set)):
+        if i < 5 or i in [11, 12, 13, 14, 15, 16]:  # Log-transformed parameters
+            print(f"  {name}: {10**value:.6f} (log: {value:.4f})")
+        else:
+            print(f"  {name}: {value:.4f}")
+    
+    # Create results summary table
+    create_results_table(params_stats, params_names_short, convergence_evals)
+    
+    # Plot parameter evolution (traces)
+    plot_parameter_traces(results_array, likelihood, params_names_short)
+    
+    # Plot parameter distributions (prior vs posterior)
+    plot_parameter_distributions(params_new_con, params_names_short, convergence_evals)
+    
+    # Plot likelihood evolution
+    plot_likelihood_evolution(likelihood)
+    
+    # Plot parameter correlations
+    plot_parameter_correlations(params_new_con, params_names_short)
+    
+    return params_stats, best_set, likelihood
 
-def plot_parameter_traces(results, param_names, save_dir='dream_plots_gwm'):
-    """Plot parameter traces for convergence diagnostics"""
-    if results is None:
-        return
+def create_results_table(params_stats, param_names, convergence_evals):
+    """Create a summary table of parameter statistics"""
     
-    os.makedirs(save_dir, exist_ok=True)
+    results_df = pd.DataFrame({
+        'Parameter': param_names,
+        'Mean_All': params_stats['mean_all'],
+        'Std_All': params_stats['std_all'],
+        'Mean_Converged': params_stats['mean_con'],
+        'Std_Converged': params_stats['std_con'],
+        'Skewness': params_stats['skew_con'],
+        'Kurtosis': params_stats['kurt_con']
+    })
     
-    n_params = len(param_names)
-    n_cols = 3
-    n_rows = int(np.ceil(n_params / n_cols))
+    # Save table
+    results_df.to_csv('dream_parameters_summary.csv', index=False)
+    print(f"\\nParameter summary saved to 'dream_parameters_summary.csv'")
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 4*n_rows))
-    axes = axes.flatten() if n_params > 1 else [axes]
+    return results_df
+
+def plot_parameter_traces(results_array, likelihood, param_names):
+    """Plot parameter evolution over DREAM iterations"""
     
-    for i, param_name in enumerate(param_names):
-        param_col = f'par{param_name}'
-        if param_col in results.columns:
-            axes[i].plot(results[param_col].values, alpha=0.7, linewidth=0.5)
-            axes[i].set_title(f'{param_name}')
-            axes[i].set_xlabel('Iteration')
-            axes[i].set_ylabel('Parameter value')
-            axes[i].grid(True, alpha=0.3)
+    numParams = results_array.shape[1]
+    n_cols = 4
+    n_rows = int(np.ceil(numParams / n_cols))
     
-    # Hide unused subplots
-    for i in range(len(param_names), len(axes)):
-        axes[i].set_visible(False)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4*n_rows))
+    axes = axes.flatten()
+    
+    for i in range(numParams):
+        axes[i].plot(results_array[:,i], alpha=0.7, linewidth=0.8, color=colors[i%len(colors)])
+        axes[i].set_title(f'{param_names[i]}', fontsize=10)
+        axes[i].set_xlabel('Iteration')
+        axes[i].set_ylabel('Parameter Value')
+        axes[i].grid(True, alpha=0.3)
+    
+    # Remove unused subplots
+    for i in range(numParams, len(axes)):
+        fig.delaxes(axes[i])
     
     plt.tight_layout()
-    plt.savefig(f'{save_dir}/parameter_traces.png', dpi=300, bbox_inches='tight')
+    plt.savefig('dream_parameter_traces.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    # Plot likelihood evolution
+    plt.figure(figsize=(10, 6))
+    plt.plot(likelihood, alpha=0.8, linewidth=1.0, color='darkred')
+    plt.title('Likelihood Evolution')
+    plt.xlabel('Iteration')
+    plt.ylabel('Log-Likelihood')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('dream_likelihood_evolution.png', dpi=300, bbox_inches='tight')
     plt.show()
 
-def plot_parameter_distributions(results, param_names, param_stats, save_dir='dream_plots_gwm'):
-    """Plot posterior parameter distributions"""
-    if results is None or param_stats is None:
-        return
+def plot_parameter_distributions(params_converged, param_names, convergence_evals):
+    """Plot parameter distributions comparing prior and posterior"""
     
-    os.makedirs(save_dir, exist_ok=True)
+    numParams = params_converged.shape[1]
+    n_cols = 4
+    n_rows = int(np.ceil(numParams / n_cols))
     
-    n_params = len(param_names)
-    n_cols = 3
-    n_rows = int(np.ceil(n_params / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4*n_rows))
+    axes = axes.flatten()
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 4*n_rows))
-    axes = axes.flatten() if n_params > 1 else [axes]
+    bars = 20
+    alpha = 0.65
     
-    for i, param_name in enumerate(param_names):
-        param_col = f'par{param_name}'
-        if param_col in results.columns and param_name in param_stats:
-            param_data = results[param_col].values
-            
-            # Plot histogram
-            axes[i].hist(param_data, bins=50, density=True, alpha=0.7, color='skyblue', edgecolor='black')
-            
-            # Add vertical lines for statistics
-            stats_data = param_stats[param_name]
-            axes[i].axvline(stats_data['mean'], color='red', linestyle='--', label=f"Mean: {stats_data['mean']:.3f}")
-            axes[i].axvline(stats_data['median'], color='green', linestyle='--', label=f"Median: {stats_data['median']:.3f}")
-            axes[i].axvline(stats_data['q025'], color='orange', linestyle=':', alpha=0.7, label=f"95% CI")
-            axes[i].axvline(stats_data['q975'], color='orange', linestyle=':', alpha=0.7)
-            
-            axes[i].set_title(f'{param_name}')
-            axes[i].set_xlabel('Parameter value')
-            axes[i].set_ylabel('Density')
-            axes[i].legend(fontsize=8)
-            axes[i].grid(True, alpha=0.3)
+    for i in range(numParams):
+        # Get prior samples
+        prior_samples = di.samples[:convergence_evals, i]
+        
+        # Plot histograms
+        axes[i].hist(prior_samples, bars, alpha=alpha+0.2, color='orange', 
+                    label="Prior", density=True, range=(di.param_distros[i].minbound, di.param_distros[i].maxbound))
+        axes[i].hist(params_converged[:,i], bars, alpha=alpha, color='blue', 
+                    label="Posterior", density=True, range=(di.param_distros[i].minbound, di.param_distros[i].maxbound))
+        
+        axes[i].set_title(f'{param_names[i]}', fontsize=10)
+        axes[i].set_xlabel('Parameter Value')
+        axes[i].set_ylabel('Density')
+        axes[i].legend(fontsize=8)
+        axes[i].grid(True, alpha=0.3)
     
-    # Hide unused subplots
-    for i in range(len(param_names), len(axes)):
-        axes[i].set_visible(False)
+    # Remove unused subplots
+    for i in range(numParams, len(axes)):
+        fig.delaxes(axes[i])
     
     plt.tight_layout()
-    plt.savefig(f'{save_dir}/parameter_distributions.png', dpi=300, bbox_inches='tight')
+    plt.savefig('dream_parameter_distributions.png', dpi=300, bbox_inches='tight')
     plt.show()
 
-def plot_likelihood_evolution(results, save_dir='dream_plots_gwm'):
-    """Plot evolution of likelihood values"""
-    if results is None:
-        return
+def plot_likelihood_evolution(likelihood):
+    """Plot likelihood evolution"""
     
-    os.makedirs(save_dir, exist_ok=True)
+    plt.figure(figsize=(12, 8))
     
-    if 'like1' in results.columns:
-        plt.figure(figsize=(12, 6))
-        plt.plot(results['like1'].values, alpha=0.7, linewidth=0.8)
-        plt.title('Likelihood Evolution')
-        plt.xlabel('Iteration')
-        plt.ylabel('Log-likelihood')
-        plt.grid(True, alpha=0.3)
-        plt.savefig(f'{save_dir}/likelihood_evolution.png', dpi=300, bbox_inches='tight')
-        plt.show()
+    # Main plot
+    plt.subplot(2, 1, 1)
+    plt.plot(likelihood, alpha=0.8, linewidth=1.0, color='darkred')
+    plt.title('Likelihood Evolution', fontsize=14)
+    plt.xlabel('Iteration')
+    plt.ylabel('Log-Likelihood')
+    plt.grid(True, alpha=0.3)
+    
+    # Running maximum
+    plt.subplot(2, 1, 2)
+    running_max = np.maximum.accumulate(likelihood)
+    plt.plot(running_max, alpha=0.9, linewidth=1.5, color='darkgreen')
+    plt.title('Running Maximum Likelihood', fontsize=14)
+    plt.xlabel('Iteration')
+    plt.ylabel('Max Log-Likelihood')
+    plt.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('dream_objective_evolution.png', dpi=300, bbox_inches='tight')
+    plt.show()
 
-def plot_parameter_correlation(results, param_names, save_dir='dream_plots_gwm'):
+def plot_parameter_correlations(params_converged, param_names):
     """Plot parameter correlation matrix"""
-    if results is None:
-        return
-    
-    os.makedirs(save_dir, exist_ok=True)
-    
-    # Extract parameter columns
-    param_cols = [f'par{param_name}' for param_name in param_names if f'par{param_name}' in results.columns]
-    param_data = results[param_cols]
-    
-    # Rename columns for better visualization
-    param_data.columns = [col.replace('par', '') for col in param_data.columns]
     
     # Calculate correlation matrix
-    corr_matrix = param_data.corr()
+    corr_matrix = np.corrcoef(params_converged.T)
     
-    # Plot correlation heatmap
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0, 
-                square=True, fmt='.2f', cbar_kws={'shrink': 0.8})
-    plt.title('Parameter Correlation Matrix')
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 10))
+    
+    # Plot correlation matrix
+    im = ax.imshow(corr_matrix, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
+    
+    # Set ticks and labels
+    ax.set_xticks(range(len(param_names)))
+    ax.set_yticks(range(len(param_names)))
+    ax.set_xticklabels(param_names, rotation=45, ha='right')
+    ax.set_yticklabels(param_names)
+    
+    # Add correlation values as text
+    for i in range(len(param_names)):
+        for j in range(len(param_names)):
+            text = ax.text(j, i, f'{corr_matrix[i, j]:.2f}',
+                         ha="center", va="center", color="black", fontsize=8)
+    
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
+    cbar.set_label('Correlation Coefficient', rotation=270, labelpad=20)
+    
+    plt.title('Parameter Correlation Matrix', fontsize=14)
     plt.tight_layout()
-    plt.savefig(f'{save_dir}/parameter_correlation.png', dpi=300, bbox_inches='tight')
+    plt.savefig('dream_parameter_correlation.png', dpi=300, bbox_inches='tight')
     plt.show()
 
-def generate_summary_table(param_stats, save_dir='dream_plots_gwm'):
-    """Generate and save parameter summary table"""
-    if param_stats is None:
-        return
-    
-    os.makedirs(save_dir, exist_ok=True)
-    
-    # Convert to DataFrame for easy handling
-    summary_df = pd.DataFrame(param_stats).T
-    summary_df = summary_df.round(4)
-    
-    print("\nParameter Summary Statistics:")
-    print("=" * 80)
-    print(summary_df.to_string())
-    
-    # Save to CSV
-    summary_df.to_csv(f'{save_dir}/parameter_summary.csv')
-    print(f"\nSummary table saved to {save_dir}/parameter_summary.csv")
-
-def main():
-    """Main function to run complete DREAM results analysis"""
-    print("Loading DREAM results for GWM model...")
-    
-    # Load results
-    results = load_dream_results('dream_GWM')
-    if results is None:
-        return
-    
-    # Analyze convergence
-    param_stats, results_converged = analyze_convergence(results, di.names)
-    
-    if param_stats is None:
-        print("Could not analyze convergence. Check your results file.")
-        return
-    
-    print("\nGenerating visualizations...")
-    
-    # Generate all plots
-    plot_parameter_traces(results, di.names)
-    plot_parameter_distributions(results_converged, di.names, param_stats)
-    plot_likelihood_evolution(results)
-    plot_parameter_correlation(results_converged, di.names)
-    
-    # Generate summary table
-    generate_summary_table(param_stats)
-    
-    print("\nDREAM results analysis completed!")
-    print("Check the 'dream_plots_gwm' directory for all generated plots and summary.")
+# %% Main execution
 
 if __name__ == "__main__":
-    main()
+    
+    # Create output directory for plots
+    os.makedirs('dream_plots_new', exist_ok=True)
+    os.chdir('dream_plots_new')
+    
+    # Analyze results (adjust convergence_evals based on your needs)
+    convergence_evals = 1000  # Number of final samples to consider converged
+    
+    try:
+        stats, best_params, likelihood = analyze_dream_results(
+            results_file='../dream_GWM_new.csv', 
+            convergence_evals=convergence_evals
+        )
+        
+        print("\\nAnalysis completed successfully!")
+        print(f"Plots saved in 'dream_plots_new' directory")
+        
+    except Exception as e:
+        print(f"Error during analysis: {e}")
+        print("Make sure to run the DREAM algorithm first (dream_run_new.py)")
+    
+    os.chdir('..')  # Return to main directory

@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-DREAM algorithm settings and executable for new GWM model
-Adapted from bayes2022 DREAM experiment
-@author: Pablo Merchán-Rivera (adapted)
+Research: A Bayesian Framework to Assess and Create Maps of Groundwater Flooding
+Dataset and algorithms for the probabilistic assessment of groundwater flooding occurrence
+Adapted for new Garching GWM model (2025)
+@author: Pablo Merchán-Rivera
 
-DREAM algorithm settings and executable for new GWM groundwater model
+DREAM algorithm settings and executable for new model
 """
+
+# %% Import libraries
 
 import numpy as np
 import spotpy
@@ -15,13 +18,13 @@ from datetime import datetime
 import os
 
 # Create logs directory if it doesn't exist
-os.makedirs('./logs', exist_ok=True)
+os.makedirs('logs', exist_ok=True)
 
-# Reinitiate log file
-f = open('./logs/log_dream_gwm.txt', 'w')
-f.write("DREAM algorithm log for new GWM model\n")
-f.write("=" * 50 + "\n")
+# reinitiate log file
+f = open('./logs/log_dream_new.txt', 'w')
 f.close()
+
+# %% Run DREAM algorithm
 
 if __name__ == "__main__":
 
@@ -29,14 +32,16 @@ if __name__ == "__main__":
     time_start = datetime.now()
     time_start_string = time_start.strftime("%d/%m/%Y %H:%M:%S")  # dd/mm/YY H:M:S
     
-    print(f"Starting DREAM algorithm for GWM model at: {time_start_string}")
+    print(f"Starting DREAM algorithm at {time_start_string}")
+    print(f"Parameters to calibrate: {len(di.param_distros)}")
+    print(f"Parameter names: {di.names}")
     
     # set the random state
     random_state = di.my_seed
     np.random.seed(random_state)
        
     # general settings
-    parallel = 'seq'   # Use sequential processing for debugging
+    parallel = 'seq'   
     spot_setup = spot_setup(_used_algorithm='dream')
     
     # select number of maximum repetitions
@@ -57,15 +62,16 @@ if __name__ == "__main__":
     runs_after_convergence = di.convEvals
     epsilon = 0.001  # tolerance threshold (Turner & Sederberg, 2012)
     
-    print(f"DREAM parameters:")
-    print(f"  - Number of chains: {nChains}")
-    print(f"  - Maximum repetitions: {rep}")
+    print(f"DREAM settings:")
+    print(f"  - Max repetitions: {rep}")
+    print(f"  - Chains: {nChains}")
+    print(f"  - Convergence limit: {convergence_limit}")
     print(f"  - Runs after convergence: {runs_after_convergence}")
     print(f"  - Random seed: {random_state}")
     
     # initiate DREAM algorithm
     sampler = spotpy.algorithms.dream(spot_setup, 
-                                      dbname='dream_GWM', 
+                                      dbname='dream_GWM_new', 
                                       dbformat='csv',
                                       db_precision=np.float32, 
                                       save_sim=True,
@@ -73,7 +79,6 @@ if __name__ == "__main__":
     
     print("Starting DREAM sampling...")
     
-    # Run DREAM algorithm
     r_hat = sampler.sample(rep, 
                            nChains=nChains, 
                            convergence_limit=convergence_limit,
@@ -83,65 +88,55 @@ if __name__ == "__main__":
                            nCr=nCr)
     
     # load the likelihood, and the parameter values of all simulations
-    try:
-        results = sampler.getdata()
-    except AttributeError:
-        # Alternative way to get results if getdata() fails
-        import pandas as pd
-        try:
-            results = pd.read_csv('dream_GWM.csv')
-            print(f"Results loaded from CSV file: {len(results)} simulations")
-        except FileNotFoundError:
-            print("Warning: Could not load results from sampler or CSV file")
-            results = None   
+    results = sampler.getdata()   
     
-    if results is not None:
-        print(f"DREAM algorithm completed. Total simulations: {len(results)}")
-    else:
-        print("DREAM algorithm completed, but could not retrieve results")
+    print(f"DREAM completed. Total samples: {len(results)}")
     
-    # Register the end of the algorithm
+    # %% Register the end of the algorithm
+    
     time_end = datetime.now()
     time_end_string = time_end.strftime("%d/%m/%Y %H:%M:%S")  # dd/mm/YY H:M:S
-    duration = time_end - time_start
     
-    f = open('./logs/log_dream_gwm.txt', 'a+')
+    f = open('./logs/log_dream_new.txt', 'a+')
     
-    if results is not None and rep > len(results):
+    if rep > len(results):
         convergence_eval = 'yes'
     else:
         convergence_eval = 'no'
     
-    summary = f''' 
+    summary = ''' 
+    
+->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->
+
+The DREAM algorithm finished for the new GWM model.
+
+- Beginning of the simulation:..... %s
+- End of the simulation:........... %s 
+- Random seed:..................... %d
+- Convergence reached:............. %s
+- Acceptance test type:............ %d
+- Maximum repetitions:............. %d
+- Runs after convergence:.......... %d 
+- Gelman-Rubin convergence limit:.. %.1f
+- Epsilon tolerance threshold:..... %f
+- Number of crossover values:...... %d
+- Number of chains:................ %d
+- Number of parameters:............ %d
+- Observation points:.............. %d
+- Stress periods:.................. %d
+
+Parameter names:
+%s
 
 ->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->
 
-The DREAM algorithm for GWM model finished.
-
-- Beginning of the simulation:..... {time_start_string}
-- End of the simulation:........... {time_end_string} 
-- Duration:........................ {duration}
-- Random seed:..................... {random_state}
-- Convergence reached:............. {convergence_eval}
-- Acceptance test type:............ {ato}
-- Maximum repetitions:............. {rep}
-- Actual simulations run:.......... {len(results) if results is not None else 'Unknown'}
-- Runs after convergence:.......... {runs_after_convergence} 
-- Gelman-Rubin convergence limit:.. {convergence_limit}
-- Epsilon tolerance threshold:..... {epsilon}
-- Number of crossover values:...... {nCr}
-- Number of chains:................ {nChains}
-- Final R-hat value:............... {r_hat if r_hat is not None else 'Not converged'}
-
-Parameter names: {di.names}
-
-->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->
-
-    '''
+    ''' % (time_start_string, time_end_string, random_state, convergence_eval, 
+    ato, rep, runs_after_convergence, convergence_limit, epsilon, nCr, nChains,
+    len(di.param_distros), 13, 139, ', '.join(di.names))
     
     f.write(summary)
     f.close()
     
-    print("Results saved to dream_GWM.csv")
-    print("Log saved to ./logs/log_dream_gwm.txt")
-    print(f"Final convergence diagnostic (R-hat): {r_hat}")
+    print(f"Log saved to './logs/log_dream_new.txt'")
+    print(f"Results saved to 'dream_GWM_new.csv'")
+    print(summary)
