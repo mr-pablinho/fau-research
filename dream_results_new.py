@@ -24,13 +24,56 @@ def create_timestamped_dir(base_name='dream_plots_gwm'):
     os.makedirs(dir_name, exist_ok=True)
     return dir_name
 
-def load_dream_results(dbname='dream_GWM'):
+def find_latest_dream_results():
+    """Find the most recent DREAM results file"""
+    import glob
+    csv_files = glob.glob('dream_GWM_*.csv')
+    if not csv_files:
+        return None
+    # Sort by modification time, most recent first
+    latest_file = max(csv_files, key=os.path.getctime)
+    return latest_file.replace('.csv', '')
+
+def load_dream_results(dbname=None):
     """Load DREAM results from CSV file"""
+    if dbname is None:
+        # Try to find the latest results file automatically
+        dbname = find_latest_dream_results()
+        if dbname is None:
+            print("No DREAM results files found. Run DREAM algorithm first.")
+            return None
+        print(f"🔍 Auto-detected latest results: {dbname}.csv")
+    
     try:
         results = pd.read_csv(f'{dbname}.csv')
+        print(f"✅ Loaded results from: {dbname}.csv")
+        print(f"📊 Results shape: {results.shape[0]} iterations × {results.shape[1]} columns")
+        
+        # Validate that results contain expected parameters
+        import dream_init_new as di
+        expected_params = [f'par{name}' for name in di.names]
+        missing_params = [p for p in expected_params if p not in results.columns]
+        if missing_params:
+            print(f"⚠️  Warning: Missing expected parameters: {missing_params}")
+        else:
+            print(f"✅ All expected parameters found: {di.names}")
+            
+        # Show first few iterations info
+        if 'like1' in results.columns:
+            best_like_idx = results['like1'].idxmax()
+            print(f"📈 Best likelihood: {results.loc[best_like_idx, 'like1']:.2f} (iteration {best_like_idx + 1})")
+        
         return results
     except FileNotFoundError:
-        print(f"Results file {dbname}.csv not found. Run DREAM algorithm first.")
+        print(f"❌ Results file {dbname}.csv not found.")
+        # Show available files
+        import glob
+        csv_files = glob.glob('dream_GWM_*.csv')
+        if csv_files:
+            print(f"Available DREAM result files:")
+            for f in sorted(csv_files, key=os.path.getctime, reverse=True):
+                mod_time = datetime.fromtimestamp(os.path.getctime(f)).strftime('%Y-%m-%d %H:%M:%S')
+                print(f"  - {f} (modified: {mod_time})")
         return None
 
 def analyze_convergence(results, param_names, burnin_fraction=0.5):
@@ -271,15 +314,22 @@ def plot_prior_posterior_density(prior_samples, posterior_samples, param_names, 
         plt.tight_layout()
         plt.savefig(f'{save_dir}/density_prior_posterior_{param_name}.png', dpi=300, bbox_inches='tight')
         plt.close()
-def main(dbname='dream_GWM'):
+def main(dbname=None):
     """Main function to run complete DREAM results analysis"""
 
-    print("Loading DREAM results for GWM model...")
+    print("=" * 60)
+    print("DREAM Results Analysis for GWM Model")
+    print("=" * 60)
+    
     # Ensure di is imported in local scope
     import dream_init_new as di
 
-    # Load results
+    # Load results (auto-detect latest if dbname not provided)
     results = load_dream_results(dbname)
+    
+    # Store the actual dbname used for later reference
+    if dbname is None:
+        dbname = find_latest_dream_results()
     if results is None:
         return
 
@@ -350,20 +400,23 @@ def main(dbname='dream_GWM'):
     # Predictive uncertainty and violin plots (if model outputs and observations available)
     try:
         # Example: load model outputs and observations (user must adapt paths/format as needed)
-        # Here, we assume model outputs are in 'dream_GWM.csv' after parameter columns
-        # and observations in './obs/obs_values.csv' (user must adapt as needed)
+        # Here, we assume model outputs are in the DREAM results CSV file after parameter columns
+        # and observations in './Output1_Input2/obs_values.csv'
         import pandas as pd
-        data_results = pd.read_csv('dream_GWM.csv')
+        data_results = pd.read_csv(f'{dbname}.csv')
         # Assume parameter columns are first len(di.names), outputs next, likelihood last
         numParams = len(di.names)
         # Example: outputs shape (n_samples, n_wells * n_times)
-        # User must adapt n_wells and n_times to their case
-        n_wells = 4
-        n_times = 300
+        # User must adapt n_wells and n_times to their case - updated for new GWM model
+        n_wells = 13  # Updated: 13 observation points in new model
+        n_times = 139  # Updated: 139 time steps in new model
         sims_all = data_results.iloc[:, numParams:numParams+n_wells*n_times].to_numpy().reshape(-1, n_wells, n_times)
         # Observations
-        obs_values = pd.read_csv('./obs/obs_values.csv', header=None).to_numpy().reshape(n_wells, n_times)
-        plot_predictive_uncertainty(sims_all, obs_values, [f'Well{i+1}' for i in range(n_wells)])
+        obs_values = pd.read_csv('./Output1_Input2/obs_values.csv', header=None).to_numpy().reshape(n_wells, n_times)
+        # Use actual observation point IDs from the GWM model
+        obs_point_ids = [8988, 10131, 9632, 13230, 14210, 15355, 16013, 15997, 16988, 18466, 18473, 19779, 19928]
+        obs_labels = [f'ObsPoint_{obs_id}' for obs_id in obs_point_ids]
+        plot_predictive_uncertainty(sims_all, obs_values, obs_labels)
         # Prior predictive (user must adapt path/format)
         # Example: load prior predictive from npy file if available
         import os
@@ -372,9 +425,18 @@ def main(dbname='dream_GWM'):
             pro_prior = np.load(prior_pred_path, allow_pickle=True)[:,1]
             # This is just an example; user must adapt to match shape (n_prior, n_wells, n_times)
             pro_prior = pro_prior.reshape(-1, n_wells, n_times)
-            plot_violin_prior_posterior(sims_all, pro_prior, [f'Well{i+1}' for i in range(n_wells)])
+            plot_violin_prior_posterior(sims_all, pro_prior, obs_labels)
     except Exception as e:
         print(f"[Optional] Could not plot predictive uncertainty/violin plots: {e}")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    
+    # Check for command line arguments
+    if len(sys.argv) > 1:
+        dbname = sys.argv[1]
+        print(f"Using specified database: {dbname}")
+        main(dbname)
+    else:
+        print("No database specified - will auto-detect latest results")
+        main()

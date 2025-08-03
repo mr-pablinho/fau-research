@@ -21,18 +21,18 @@ np.random.seed(my_seed)
 # Define all possible parameters with their default values and distributions
 ALL_PARAMETERS = {
     # Hydraulic conductivity (m/d) - log-uniform distribution
-    'hk1': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk1', low=np.log10(1e-2), high=np.log10(1e2)), 'transform': 'log'},
-    'hk2': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk2', low=np.log10(1e-2), high=np.log10(1e2)), 'transform': 'log'},
-    'hk3': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk3', low=np.log10(1e-2), high=np.log10(1e2)), 'transform': 'log'},
-    'hk4': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk4', low=np.log10(1e-2), high=np.log10(1e2)), 'transform': 'log'},
-    'hk5': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk5', low=np.log10(1e-2), high=np.log10(1e2)), 'transform': 'log'},
+    'hk1': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk1', low=np.log10(1e-3), high=np.log10(1e3)), 'transform': 'log'},
+    'hk2': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk2', low=np.log10(1e-3), high=np.log10(1e3)), 'transform': 'log'},
+    'hk3': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk3', low=np.log10(1e-3), high=np.log10(1e3)), 'transform': 'log'},
+    'hk4': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk4', low=np.log10(1e-3), high=np.log10(1e3)), 'transform': 'log'},
+    'hk5': {'default': 1.0, 'distribution': spotpy.parameter.Uniform('hk5', low=np.log10(1e-3), high=np.log10(1e3)), 'transform': 'log'},
     
     # Specific yield (dimensionless)
-    'sy1': {'default': 0.2, 'distribution': spotpy.parameter.Uniform('sy1', low=0.05, high=0.35), 'transform': 'linear'},
-    'sy2': {'default': 0.2, 'distribution': spotpy.parameter.Uniform('sy2', low=0.05, high=0.35), 'transform': 'linear'},
-    'sy3': {'default': 0.2, 'distribution': spotpy.parameter.Uniform('sy3', low=0.05, high=0.35), 'transform': 'linear'},
-    'sy4': {'default': 0.2, 'distribution': spotpy.parameter.Uniform('sy4', low=0.05, high=0.35), 'transform': 'linear'},
-    'sy5': {'default': 0.2, 'distribution': spotpy.parameter.Uniform('sy5', low=0.05, high=0.35), 'transform': 'linear'},
+    'sy1': {'default': 0.1, 'distribution': spotpy.parameter.Uniform('sy1', low=0.01, high=0.35), 'transform': 'linear'},
+    'sy2': {'default': 0.1, 'distribution': spotpy.parameter.Uniform('sy2', low=0.01, high=0.35), 'transform': 'linear'},
+    'sy3': {'default': 0.1, 'distribution': spotpy.parameter.Uniform('sy3', low=0.01, high=0.35), 'transform': 'linear'},
+    'sy4': {'default': 0.1, 'distribution': spotpy.parameter.Uniform('sy4', low=0.01, high=0.35), 'transform': 'linear'},
+    'sy5': {'default': 0.1, 'distribution': spotpy.parameter.Uniform('sy5', low=0.01, high=0.35), 'transform': 'linear'},
     
     # River stage adjustment (m)
     'D_Isar': {'default': 0.0, 'distribution': spotpy.parameter.Uniform('D_Isar', low=-2.0, high=2.0), 'transform': 'linear'},
@@ -56,7 +56,8 @@ ALL_PARAMETERS = {
 
 # Example configurations:
 # For quick tests (top 5 most sensitive parameters):
-UNCERTAIN_PARAMS_QUICK = ['hk4', 'hk3', 'hk5', 'hk1', 'Kriv_Muhlbach']
+UNCERTAIN_PARAMS_QUICK = ['hk4', 'hk3']
+# UNCERTAIN_PARAMS_QUICK = ['hk4', 'hk3', 'hk5', 'hk1', 'Kriv_Muhlbach']
 
 # For medium complexity (top 8 most sensitive parameters):
 UNCERTAIN_PARAMS_MEDIUM = ['hk4', 'hk3', 'hk5', 'hk1', 'Kriv_Muhlbach', 'hk2', 'D_rch2', 'Kriv_Griesbach']
@@ -99,9 +100,9 @@ numParams = len(param_distros)
 # Suggested settings based on number of parameters
 if numParams <= 5:
     # Quick experiments - DREAM needs at least 2*numParams+1 chains
-    rep = 2000  # Increased from 500
+    rep = 1000  # Increased from 500
     convEvals = 300  # Increased from 100
-    nChains = max(2*numParams + 1, 8)  # Increased minimum chains
+    nChains = max(2*numParams + 1, 10)  # Increased minimum chains to be safe
     experiment_type = "QUICK"
 elif numParams <= 10:
     # Medium experiments

@@ -258,6 +258,6 @@ if __name__ == "__main__":
     if all_passed:
         print("\nAll tests passed! DREAM setup is ready.")
         print("Check 'test_plots/dream_test_results.png' for visualization")
-        print("You can now run: python dream_run_new.py")
+        print("You can now run: python dream_run_batch.py")
     else:
         print("\nSome tests failed. Please check the setup before running DREAM.")

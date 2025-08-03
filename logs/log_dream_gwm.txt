@@ -1,0 +1,70 @@
+DREAM algorithm log for new GWM model
+==================================================
+
+--- Batch run started: 31/07/2025 21:33:21 ---
+Database: dream_GWM_20250731_213321
+Starting from iteration: 0
+
+--- Batch run started: 31/07/2025 23:41:21 ---
+Database: dream_GWM_20250731_234121
+Starting from iteration: 0
+
+--- Batch run started: 31/07/2025 23:41:48 ---
+Database: dream_GWM_20250731_213321
+Starting from iteration: 500
+
+--- Batch run started: 31/07/2025 23:42:54 ---
+Database: dream_GWM_20250731_213321
+Starting from iteration: 500
+
+--- Batch run started: 01/08/2025 09:11:00 ---
+Database: dream_GWM_20250731_213321
+Starting from iteration: 500
+
+--- Batch run started: 01/08/2025 15:09:12 ---
+Database: dream_GWM_20250801_150912
+Starting from iteration: 0
+
+--- Batch run started: 01/08/2025 15:13:05 ---
+Database: dream_GWM_20250801_151305
+Starting from iteration: 0
+
+--- Batch run started: 01/08/2025 17:03:26 ---
+Database: dream_GWM_20250801_170326
+Starting from iteration: 0
+
+--- Batch run started: 01/08/2025 21:54:05 ---
+Database: dream_GWM_20250801_215405
+Starting from iteration: 0
+
+--- Batch run started: 02/08/2025 12:06:35 ---
+Database: dream_GWM_20250801_215405
+Starting from iteration: 250
+
+--- Batch run started: 03/08/2025 00:23:00 ---
+Database: dream_GWM_20250803_002300
+Starting from iteration: 0
+
+--- Batch run started: 03/08/2025 00:36:03 ---
+Database: dream_GWM_20250803_003603
+Starting from iteration: 0
+
+--- Batch run started: 03/08/2025 00:36:18 ---
+Database: dream_GWM_20250803_003618
+Starting from iteration: 0
+
+--- Batch run started: 03/08/2025 00:36:46 ---
+Database: dream_GWM_20250803_003646
+Starting from iteration: 0
+
+--- Batch run started: 03/08/2025 00:49:19 ---
+Database: dream_GWM_20250803_004919
+Starting from iteration: 0
+
+--- Batch run started: 03/08/2025 00:51:06 ---
+Database: dream_GWM_20250803_003646
+Starting from iteration: 0
+
+--- Batch run started: 03/08/2025 14:40:34 ---
+Database: dream_GWM_20250803_144034
+Starting from iteration: 0
