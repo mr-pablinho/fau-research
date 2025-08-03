@@ -72,12 +72,14 @@ except ImportError:
 CALIBRATE_PARAMS = [
     'hk3',
     'hk4',
+    'hk5',
+    'Kriv_Isar',
 ]
 
 print(f"DREAM will calibrate {len(CALIBRATE_PARAMS)} parameters: {CALIBRATE_PARAMS}")
 
 # %% Setup random state for the whole process
-   
+
 # set the random state
 my_seed = 246
 np.random.seed(my_seed)
@@ -85,9 +87,11 @@ np.random.seed(my_seed)
 # %% Create parameter distributions dynamically
 
 # Parameters that use log-transformation (conductivities)
-LOG_TRANSFORM_PARAMS = ['hk1', 'hk2', 'hk3', 'hk4', 'hk5', 
-                       'Kriv_Isar', 'Kriv_Muhlbach', 'Kriv_Giessen', 
-                       'Kriv_Griesbach', 'Kriv_Schwabinger_Bach', 'Kriv_Wiesackerbach']
+LOG_TRANSFORM_PARAMS = [
+    'hk1', 'hk2', 'hk3', 'hk4', 'hk5', 
+    'Kriv_Isar', 'Kriv_Muhlbach', 'Kriv_Giessen', 
+    'Kriv_Griesbach', 'Kriv_Schwabinger_Bach', 'Kriv_Wiesackerbach'
+    ]
 
 # Build parameter names and distributions for only the calibrated parameters
 names = []

@@ -63,7 +63,7 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
     
     if not os.path.exists(results_file):
         print(f"Results file {results_file} not found. Please run the DREAM algorithm first.")
-        return
+        return None, None, None
     
     # Set random seed for reproducibility
     np.random.seed(di.my_seed) 
@@ -74,18 +74,49 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
     # Import DREAM results
     data_results = pd.read_csv(results_file)
     print(f"Total samples in results: {len(data_results)}")
+    print(f"All columns: {data_results.columns.tolist()}")
     
-    # Extract parameters and likelihood
-    numParams = len(di.param_distros)
+    # Identify parameter columns - ONLY actual parameters, not simulation results
+    param_columns = []
+    likelihood_col = None
+    
+    for col in data_results.columns:
+        if 'like' in col.lower():
+            likelihood_col = col
+        elif col.startswith('par') and not col.startswith('simulation'):
+            param_columns.append(col)
+    
+    # Also check for specific parameter names we know
+    for col in ['parhk3', 'parhk4']:
+        if col in data_results.columns and col not in param_columns:
+            param_columns.append(col)
+    
+    if likelihood_col is None:
+        print("Warning: No likelihood column found, using first column")
+        likelihood_col = data_results.columns[0]
+    
+    if not param_columns:
+        print("Error: No parameter columns found!")
+        return None, None, None
+    
+    print(f"Likelihood column: {likelihood_col}")
+    print(f"Parameter columns ({len(param_columns)}): {param_columns}")
+    
+    # Extract only the parameter data we want to analyze
+    numParams = len(param_columns)
     results_array = np.zeros((len(data_results), numParams))
-    for i in range(numParams):
-        results_array[:,i] = data_results.iloc[:,i+1]
+    for i, col in enumerate(param_columns):
+        results_array[:,i] = data_results[col].values
         
-    likelihood = np.array(data_results.iloc[:,0])
+    likelihood = data_results[likelihood_col].values
     
     # Extract estimated parameters (all samples vs converged samples)
-    params_new_all = data_results.to_numpy()[:,1:numParams+1]
-    params_new_con = params_new_all[-convergence_evals:,:]
+    params_new_all = results_array
+    # Adjust convergence_evals if we have fewer samples than requested
+    actual_convergence_evals = min(convergence_evals, len(data_results))
+    params_new_con = params_new_all[-actual_convergence_evals:,:]
+    
+    print(f"Using last {actual_convergence_evals} samples for convergence analysis (requested: {convergence_evals})")
     
     # Compute statistics
     params_stats = {}
@@ -97,32 +128,35 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
     params_stats['kurt_con'] = kurtosis(params_new_con, axis=0)
     
     # Find best parameter set
-    best_set_loc = data_results['like1'].idxmax()
-    best_set = data_results.iloc[best_set_loc, 1:numParams+1].values
-    best_likelihood = data_results.iloc[best_set_loc, 0]
+    best_set_loc = data_results[likelihood_col].idxmax()
+    best_set = np.array([data_results.loc[best_set_loc, col] for col in param_columns])
+    best_likelihood = data_results.loc[best_set_loc, likelihood_col]
+    
+    # Use the actual parameter names we found
+    param_names_to_use = param_columns
     
     print(f"\\nBest likelihood: {best_likelihood:.4f}")
     print("Best parameter set:")
-    for i, (name, value) in enumerate(zip(params_names_short, best_set)):
-        if i < 5 or i in [11, 12, 13, 14, 15, 16]:  # Log-transformed parameters
+    for i, (name, value) in enumerate(zip(param_names_to_use, best_set)):
+        if 'hk' in name or 'Kriv' in name:  # Log-transformed parameters
             print(f"  {name}: {10**value:.6f} (log: {value:.4f})")
         else:
             print(f"  {name}: {value:.4f}")
     
     # Create results summary table
-    create_results_table(params_stats, params_names_short, convergence_evals)
+    create_results_table(params_stats, param_names_to_use, actual_convergence_evals)
     
     # Plot parameter evolution (traces)
-    plot_parameter_traces(results_array, likelihood, params_names_short)
+    plot_parameter_traces(results_array, likelihood, param_names_to_use)
     
     # Plot parameter distributions (prior vs posterior)
-    plot_parameter_distributions(params_new_con, params_names_short, convergence_evals)
+    plot_parameter_distributions(params_new_con, param_names_to_use, actual_convergence_evals)
     
     # Plot likelihood evolution
     plot_likelihood_evolution(likelihood)
     
     # Plot parameter correlations
-    plot_parameter_correlations(params_new_con, params_names_short)
+    plot_parameter_correlations(params_new_con, param_names_to_use)
     
     return params_stats, best_set, likelihood
 
@@ -153,7 +187,12 @@ def plot_parameter_traces(results_array, likelihood, param_names):
     n_rows = int(np.ceil(numParams / n_cols))
     
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4*n_rows))
-    axes = axes.flatten()
+    if numParams == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = [axes] if n_cols == 1 else axes
+    else:
+        axes = axes.flatten()
     
     for i in range(numParams):
         axes[i].plot(results_array[:,i], alpha=0.7, linewidth=0.8, color=colors[i%len(colors)])
@@ -168,7 +207,7 @@ def plot_parameter_traces(results_array, likelihood, param_names):
     
     plt.tight_layout()
     plt.savefig('dream_parameter_traces.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()  # Close the figure to free memory
     
     # Plot likelihood evolution
     plt.figure(figsize=(10, 6))
@@ -179,7 +218,7 @@ def plot_parameter_traces(results_array, likelihood, param_names):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig('dream_likelihood_evolution.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()  # Close the figure to free memory
 
 def plot_parameter_distributions(params_converged, param_names, convergence_evals):
     """Plot parameter distributions comparing prior and posterior"""
@@ -189,20 +228,35 @@ def plot_parameter_distributions(params_converged, param_names, convergence_eval
     n_rows = int(np.ceil(numParams / n_cols))
     
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4*n_rows))
-    axes = axes.flatten()
+    if numParams == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = [axes] if n_cols == 1 else axes
+    else:
+        axes = axes.flatten()
     
     bars = 20
     alpha = 0.65
     
     for i in range(numParams):
-        # Get prior samples
-        prior_samples = di.samples[:convergence_evals, i]
+        # Try to get prior samples if available
+        try:
+            import dream_init_new as di
+            if hasattr(di, 'samples') and i < len(di.samples[0]):
+                prior_samples = di.samples[:convergence_evals, i]
+                range_bounds = (di.param_distros[i].minbound, di.param_distros[i].maxbound)
+                # Plot prior histogram
+                axes[i].hist(prior_samples, bars, alpha=alpha+0.2, color='orange', 
+                            label="Prior", density=True, range=range_bounds)
+            else:
+                range_bounds = None
+        except (ImportError, AttributeError, IndexError):
+            print(f"Warning: Could not load prior samples for parameter {param_names[i]}")
+            range_bounds = None
         
-        # Plot histograms
-        axes[i].hist(prior_samples, bars, alpha=alpha+0.2, color='orange', 
-                    label="Prior", density=True, range=(di.param_distros[i].minbound, di.param_distros[i].maxbound))
+        # Plot posterior histogram
         axes[i].hist(params_converged[:,i], bars, alpha=alpha, color='blue', 
-                    label="Posterior", density=True, range=(di.param_distros[i].minbound, di.param_distros[i].maxbound))
+                    label="Posterior", density=True, range=range_bounds)
         
         axes[i].set_title(f'{param_names[i]}', fontsize=10)
         axes[i].set_xlabel('Parameter Value')
@@ -216,7 +270,7 @@ def plot_parameter_distributions(params_converged, param_names, convergence_eval
     
     plt.tight_layout()
     plt.savefig('dream_parameter_distributions.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()  # Close the figure to free memory
 
 def plot_likelihood_evolution(likelihood):
     """Plot likelihood evolution"""
@@ -242,7 +296,7 @@ def plot_likelihood_evolution(likelihood):
     
     plt.tight_layout()
     plt.savefig('dream_objective_evolution.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()  # Close the figure to free memory
 
 def plot_parameter_correlations(params_converged, param_names):
     """Plot parameter correlation matrix"""
@@ -275,7 +329,7 @@ def plot_parameter_correlations(params_converged, param_names):
     plt.title('Parameter Correlation Matrix', fontsize=14)
     plt.tight_layout()
     plt.savefig('dream_parameter_correlation.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()  # Close the figure to free memory
 
 # %% Main execution
 
