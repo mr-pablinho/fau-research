@@ -46,25 +46,25 @@ except ImportError:
     print("Warning: params.py not found, using default parameter definitions")
     # Fallback parameter definitions if params.py is not available
     param_definitions = {
-        'hk1': (5000, [100, 10000]),
-        'hk2': (3000, [100, 10000]),
-        'hk3': (4000, [100, 10000]),
-        'hk4': (2000, [100, 10000]),
-        'hk5': (1500, [100, 10000]),
-        'sy1': (0.2, [0.05, 0.35]),
-        'sy2': (0.15, [0.05, 0.35]),
-        'sy3': (0.25, [0.05, 0.35]),
-        'sy4': (0.18, [0.05, 0.35]),
-        'sy5': (0.12, [0.05, 0.35]),
+        'hk1': (1000, [100, 10000]),
+        'hk2': (1000, [100, 10000]),
+        'hk3': (1000, [100, 10000]),
+        'hk4': (1000, [100, 10000]),
+        'hk5': (1000, [100, 10000]),
+        'sy1': (0.20, [0.05, 0.35]),
+        'sy2': (0.20, [0.05, 0.35]),
+        'sy3': (0.20, [0.05, 0.35]),
+        'sy4': (0.20, [0.05, 0.35]),
+        'sy5': (0.20, [0.05, 0.35]),
         'D_Isar': (0.0, [-0.5, 0.5]),
-        'Kriv_Isar': (500, [10, 1000]),
-        'Kriv_Muhlbach': (200, [10, 1000]),
-        'Kriv_Giessen': (150, [10, 1000]),
+        'Kriv_Isar': (100, [10, 1000]),
+        'Kriv_Muhlbach': (100, [10, 1000]),
+        'Kriv_Giessen': (100, [10, 1000]),
         'Kriv_Griesbach': (100, [10, 1000]),
-        'Kriv_Schwabinger_Bach': (80, [10, 1000]),
-        'Kriv_Wiesackerbach': (60, [10, 1000]),
-        'D_rch1': (1.5, [0, 3]),
-        'D_rch2': (0.5, [0, 1])
+        'Kriv_Schwabinger_Bach': (100, [10, 1000]),
+        'Kriv_Wiesackerbach': (100, [10, 1000]),
+        'D_rch1': (1.0, [1, 3]),
+        'D_rch2': (1.0, [1, 3])
     }
 
 # %% Dynamic parameter selection
@@ -130,14 +130,11 @@ for param_name in fixed_params:
 
 # %% DREAM algorithm settings
 
-# number of repetitions and chains (reduced for initial testing with fewer parameters)
-rep = 50  # Increased for better results
+rep =  5000  
 numSamples = rep
-convEvals = 20  # Increased convergence evaluations
+convEvals = 300
 numParams = len(param_distros)
-# DREAM needs at least 2*numParams+1 chains for proper operation
-# Based on SPOTPY warning, we need even more chains
-nChains = max(7, 2*numParams + 1)  # Increased minimum chains for DREAM algorithm
+nChains = max(7, 2*numParams + 1)
 
 print(f"\nDREAM settings:")
 print(f"  Parameters to calibrate: {numParams}")
@@ -146,11 +143,11 @@ print(f"  Chains: {nChains} (minimum required: {2*numParams + 1})")
 print(f"  Convergence evaluations: {convEvals}")
 
 # Generate initial samples for parameter space exploration
-samples = np.zeros((numSamples, numParams))
-for i in range(numSamples):
-    gen_samples = spotpy.parameter.generate(param_distros)
-    for j in range(numParams):
-        samples[i,j] = gen_samples[j][0]        
+# samples = np.zeros((numSamples, numParams))
+# for i in range(numSamples):
+#     gen_samples = spotpy.parameter.generate(param_distros)
+#     for j in range(numParams):
+#         samples[i,j] = gen_samples[j][0]        
 
 # Create unique identifier for this run
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

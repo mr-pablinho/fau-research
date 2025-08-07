@@ -1,14 +1,15 @@
 
+# %% Import libraries
 import os
 import math
 import flopy
 import pandas as pd
-# import geopandas as gpd
+import geopandas as gpd
 import numpy as np
 import flopy.utils.binaryfile as bf
 from flopy.utils import HeadFile
 import matplotlib.pyplot as plt
-# from shapely.geometry import Point
+from shapely.geometry import Point
 
 def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kriv_Muhlbach, Kriv_Giessen, Kriv_Griesbach, Kriv_Schwabinger_Bach, Kriv_Wiesackerbach, D_rch1, D_rch2, custom_out_dir=None):
 
@@ -30,16 +31,16 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
 
     """ #%% Model parameters """
     # UPW
-    hk1 = hk1  # hydraulic conductivity (m/d)
-    hk2 = hk2  
-    hk3 = hk3 
-    hk4 = hk4  
-    hk5 = hk5 
-    sy1 = sy1 # specific yield (-)
-    sy2 = sy2 
-    sy3 = sy3
-    sy4 = sy4 
-    sy5 = sy5
+    hk1             = hk1  # hydraulic conductivity (m/d)
+    hk2             = hk2  
+    hk3             = hk3 
+    hk4             = hk4  
+    hk5             = hk5 
+    sy1             = sy1 # specific yield (-)
+    sy2             = sy2 
+    sy3             = sy3
+    sy4             = sy4 
+    sy5             = sy5
 
     # RIV
     D_Isar = D_Isar # Stage 
@@ -62,7 +63,11 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
     nlay            = 1 
 
     model           = flopy.modflow.Modflow(modelname,version="mfnwt", exe_name="MODFLOW-NWT_64", model_ws=out_dir)
-    x_min, y_min, x_max, y_max = 692090.4963030412, 5342930.1120141, 700141.6957627917, 5352057.373846412
+    domain_shpname  = os.path.join(in_dir,shape_name)
+    gdf             = gpd.read_file(domain_shpname)
+    bounds          = gdf.bounds
+    x_min, y_min, x_max, y_max = bounds.minx[0], bounds.miny[0], bounds.maxx[0], bounds.maxy[0]
+    domain_polygon  = gdf.geometry[0] 
 
     # Add Spatial discretization
     x_min           = math.floor(x_min / grid_size) * grid_size
@@ -96,7 +101,7 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
     grid_botm =  np.loadtxt(os.path.join(in_dir, 'Cell_Bottom_ly1.csv'), delimiter=',')
 
     # Assign top and bot to DIS
-    dis.top  = grid_top #+ 5
+    dis.top  = grid_top + 5
     dis.botm = grid_botm 
 
     """ #%% UPW """
@@ -330,10 +335,9 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
         df['Stage'] = df['Stage'] + D_riv_val
         df['Rbott'] = df['Rbott'] + D_riv_val
 
-        # --- Replace symbolic conductance with numeric value and convert to float
-        # Create a mapping and apply it to avoid pandas FutureWarning
-        cond_mapping = riv_par_dict[river_name]
-        df['Cond'] = df['Cond'].map(cond_mapping).fillna(df['Cond']).astype(float)
+        # --- Replace symbolic conductance with numeric value
+        df['Cond'] = df['Cond'].replace(riv_par_dict[river_name])
+        df['Cond'] = df['Cond'].astype(float)
 
         # --- Convert to zero-based indexing for MODFLOW
         df['Layer']  = df['Layer'] - 1
@@ -378,7 +382,6 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
 
     hob = flopy.modflow.ModflowHob(model, iuhobsv=7, hobdry=-999, obs_data=obs_data)
 
-
     """ #%% WEL - Extraction and Injection Wells (balanced by stress period) """
     # Manually define extraction wells: [(layer, row, col), ...]
     extraction_wells = [
@@ -400,7 +403,6 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
     # Create the WEL package
     wel = flopy.modflow.ModflowWel(model, stress_period_data=wel_spd)
 
-
     """ Numerical solver """
     n   = flopy.modflow.ModflowNwt(model, maxiterout=500, headtol=1e-3, fluxtol=1e-0,iprnwt=1,options="COMPLEX",linmeth=2)
 
@@ -410,19 +412,18 @@ def GWM(hk1, hk2, hk3, hk4, hk5, sy1, sy2, sy3, sy4, sy5, D_Isar, Kriv_Isar, Kri
     
     """ Run modflow """
 
-    # Run model silently to suppress verbose stress period output
-    model.run_model(silent=True)
+    model.run_model()
     
     """ # Cleanup: delete all non-output files after model run
     # You can customize which files you consider "output" vs "temporary input" """
-    #keep_exts = ['.hds', '.cbc', '.hob.out', '.list']  
-    #for f in os.listdir(out_dir):
-     #   full_path = os.path.join(out_dir, f)
-      #  if os.path.isfile(full_path) and not any(f.endswith(ext) for ext in keep_exts):
-       #     try:
-        #        os.remove(full_path)
-         #   except Exception as e:
-          #      print(f"⚠️ Could not delete {f}: {e}")
+    keep_exts = ['.hds', '.cbc', '.hob.out', '.list']  
+    for f in os.listdir(out_dir):
+        full_path = os.path.join(out_dir, f)
+        if os.path.isfile(full_path) and not any(f.endswith(ext) for ext in keep_exts):
+            try:
+                os.remove(full_path)
+            except Exception as e:
+                print(f"⚠️ Could not delete {f}: {e}")
 
     return model, out_dir  # model and workspace
 
@@ -471,7 +472,7 @@ def get_heads_from_obs_csv(model_ws, obs_csv_path='Output1_Input2/obs.csv'):
     hds = flopy.utils.HeadFile(hds_path)
 
     available_kstpkper = hds.get_kstpkper()
-    # print(f"\n? Available head time steps in output: {available_kstpkper}")
+    print(f"\n? Available head time steps in output: {available_kstpkper}")
 
     sim_heads = []
     for kstpkper in available_kstpkper:
