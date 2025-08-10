@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Comprehensive script to:
 1. Extract post-convergence parameters from DREAM results
 2. Run GWM model for each parameter set
 3. Save all head values for each run  
