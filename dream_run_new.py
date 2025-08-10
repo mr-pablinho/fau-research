@@ -49,12 +49,12 @@ if __name__ == "__main__":
     # Gelman–Rubin convergence diagnostic provides a numerical convergence summary based on multiple chains
     nChains = di.nChains
     convergence_limit = (
-        1.2  # maximum Gelman–Rubin diagnostic across all model parameters
+        1.0  # maximum Gelman–Rubin diagnostic across all model parameters
     )
 
     # define DREAM algorithm parameters (further details in Vrugt, 2016)
     runs_after_convergence = di.convEvals
-    epsilon = 0.001  # tolerance threshold (Turner & Sederberg, 2012)
+    epsilon = 1e-5  # tolerance threshold (Turner & Sederberg, 2012)
 
     print(f"DREAM settings:")
     print(f"  - Max repetitions: {rep}")

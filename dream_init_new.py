@@ -46,11 +46,11 @@ except ImportError:
     print("Warning: params.py not found, using default parameter definitions")
     # Fallback parameter definitions if params.py is not available
     param_definitions = {
-        'hk1': (1000, [100, 10000]),
-        'hk2': (1000, [100, 10000]),
-        'hk3': (1000, [100, 10000]),
-        'hk4': (1000, [100, 10000]),
-        'hk5': (1000, [100, 10000]),
+        'hk1': (1000, [1, 10000]),
+        'hk2': (1000, [1, 10000]),
+        'hk3': (1000, [1, 10000]),
+        'hk4': (1000, [1, 10000]),
+        'hk5': (1000, [1, 10000]),
         'sy1': (0.20, [0.05, 0.35]),
         'sy2': (0.20, [0.05, 0.35]),
         'sy3': (0.20, [0.05, 0.35]),
@@ -71,10 +71,13 @@ except ImportError:
 
 # CONFIGURE WHICH PARAMETERS TO CALIBRATE HERE
 CALIBRATE_PARAMS = [
+    'hk1',
+    'hk2',
     'hk3',
     'hk4',
     'hk5',
     'Kriv_Isar',
+    'Kriv_Muhlbach',
 ]
 
 print(f"DREAM will calibrate {len(CALIBRATE_PARAMS)} parameters: {CALIBRATE_PARAMS}")
