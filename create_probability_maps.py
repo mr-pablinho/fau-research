@@ -141,13 +141,12 @@ def prepare_full_parameter_sets(post_conv_params):
     print(f"   Created {len(full_param_sets)} complete parameter sets")
     return full_param_sets
 
-def run_ensemble_models(full_param_sets, output_base_dir="ensemble_results", timestamp=None):
+def run_ensemble_models(full_param_sets, timestamp=None):
     """
     Run GWM model for each parameter set and save head arrays
     
     Parameters:
     - full_param_sets: List of parameter dictionaries
-    - output_base_dir: Base directory for saving results
     - timestamp: Timestamp string to use for output directory (if None, generates new one)
     
     Returns:
@@ -159,7 +158,7 @@ def run_ensemble_models(full_param_sets, output_base_dir="ensemble_results", tim
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    output_dir = os.path.join(output_base_dir, f"ensemble_{timestamp}")
+    output_dir = f"ensemble_{timestamp}"
     os.makedirs(output_dir, exist_ok=True)
     print(f"   📁 Output directory: {output_dir}")
     
@@ -182,8 +181,8 @@ def run_ensemble_models(full_param_sets, output_base_dir="ensemble_results", tim
     # Run models
     print(f"   🔧 Starting model runs...")
     for i, param_set in enumerate(full_param_sets):
-        # Print progress every 10 runs or at key milestones
-        if i % 10 == 0 or i == len(full_param_sets) - 1:
+        # Print progress for all runs if ≤10 runs, otherwise every 10 runs + last run
+        if len(full_param_sets) <= 10 or i % 10 == 0 or i == len(full_param_sets) - 1:
             print(f"   🔄 Running model {i+1}/{len(full_param_sets)} ({100*(i+1)/len(full_param_sets):.1f}%)")
         
         try:
@@ -570,9 +569,6 @@ def main():
     # PROBABILITY THRESHOLDS: Depth below surface to consider "at risk"
     depth_thresholds = [0.0, 1.0, 2.0]  # meters below topography
     # 0.0 = reaches surface, 1.0 = within 1m of surface, 2.0 = within 2m of surface
-    
-    # Other options
-    output_base_dir = "ensemble_results"  # Base directory for outputs
     # ======================================================
     
     # Check if DREAM results file exists
@@ -613,7 +609,7 @@ def main():
             print(f"📊 Analyzing all available stress periods")
         
         # Step 3: Run ensemble of models (with DREAM timestamp)
-        results_summary = run_ensemble_models(full_param_sets, output_base_dir, timestamp=dream_timestamp)
+        results_summary = run_ensemble_models(full_param_sets, timestamp=dream_timestamp)
         
         # Step 4: Create probability maps
         if results_summary['successful_runs'] > 0:
