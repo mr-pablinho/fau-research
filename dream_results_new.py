@@ -1,14 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Research: A Bayesian Framework to Assess and Create Maps of Groundwater Flooding
-Dataset and algorithms for the probabilistic assessment of groundwater flooding occurrence
-Adapted for new Garching GWM model (2025)
-@author: Pablo Merchán-Rivera
-
 Evaluate DREAM results for new model
 """
-
-# %% Import libraries
 
 import numpy as np
 import pandas as pd
@@ -19,41 +12,33 @@ import os
 import re
 from datetime import datetime
 
-# %% Parameter name mappings for plotting
+# Parameter names for results
+params_names_short = list(di.param_definitions.keys())
+params_names_full = [
+    "Hydraulic Conductivity Zone 1 (m/d)",
+    "Hydraulic Conductivity Zone 2 (m/d)",
+    "Hydraulic Conductivity Zone 3 (m/d)",
+    "Hydraulic Conductivity Zone 4 (m/d)",
+    "Hydraulic Conductivity Zone 5 (m/d)",
+    "Specific Yield Zone 1 (-)",
+    "Specific Yield Zone 2 (-)",
+    "Specific Yield Zone 3 (-)",
+    "Specific Yield Zone 4 (-)",
+    "Specific Yield Zone 5 (-)",
+    "Isar Stage Adjustment (m)",
+    "Isar River Conductance (m²/d)",
+    "Muhlbach River Conductance (m²/d)",
+    "Giessen River Conductance (m²/d)",
+    "Griesbach River Conductance (m²/d)",
+    "Schwabinger Bach Conductance (m²/d)",
+    "Wiesackerbach River Conductance (m²/d)",
+    "Background Recharge Multiplier (-)",
+    "Urban Recharge Multiplier (-)",
+]
 
-# Short names for plot titles
-params_names_short = ['hk1', 'hk2', 'hk3', 'hk4', 'hk5', 
-                     'sy1', 'sy2', 'sy3', 'sy4', 'sy5',
-                     'D_Isar', 'Kriv_Isar', 'Kriv_Muhlbach', 'Kriv_Giessen',
-                     'Kriv_Griesbach', 'Kriv_Schwabinger_Bach', 'Kriv_Wiesackerbach',
-                     'D_rch1', 'D_rch2']
+colors = ["#3049d6", "#edca55", "#45b674", "#961a1a", "#8b46cc"]
 
-# Full names for plot labels
-params_names_full = ['Hydraulic Conductivity Zone 1 (m/d)', 
-                    'Hydraulic Conductivity Zone 2 (m/d)',
-                    'Hydraulic Conductivity Zone 3 (m/d)',
-                    'Hydraulic Conductivity Zone 4 (m/d)',
-                    'Hydraulic Conductivity Zone 5 (m/d)',
-                    'Specific Yield Zone 1 (-)',
-                    'Specific Yield Zone 2 (-)',
-                    'Specific Yield Zone 3 (-)',
-                    'Specific Yield Zone 4 (-)',
-                    'Specific Yield Zone 5 (-)',
-                    'Isar Stage Adjustment (m)',
-                    'Isar River Conductance (m²/d)',
-                    'Muhlbach River Conductance (m²/d)',
-                    'Giessen River Conductance (m²/d)',
-                    'Griesbach River Conductance (m²/d)',
-                    'Schwabinger Bach Conductance (m²/d)',
-                    'Wiesackerbach River Conductance (m²/d)',
-                    'Background Recharge Multiplier (-)',
-                    'Urban Recharge Multiplier (-)']
-
-# Color definitions
-colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
-
-# %% Evaluate results
-
+# Evaluate results
 def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=1000):
     """
     Analyze DREAM results for the new GWM model
@@ -146,37 +131,44 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
     best_set = np.array([data_results.loc[best_set_loc, col] for col in param_columns])
     best_likelihood = data_results.loc[best_set_loc, likelihood_col]
     
-    # Use the actual parameter names we found
-    param_names_to_use = param_columns
-    
-    print(f"\\nBest likelihood: {best_likelihood:.4f}")
+    print(f"\nBest likelihood: {best_likelihood:.4f}")
     print("Best parameter set:")
-    for i, (name, value) in enumerate(zip(param_names_to_use, best_set)):
+    for i, (name, value) in enumerate(zip(param_columns, best_set)):
         if 'hk' in name or 'Kriv' in name:  # Log-transformed parameters
             print(f"  {name}: {10**value:.6f} (log: {value:.4f})")
         else:
             print(f"  {name}: {value:.4f}")
+
+    # Save best parameter set to CSV using a function
+    save_best_parameter_set(best_set, param_columns, best_likelihood, output_suffix)
     
     # Create results summary table
-    create_results_table(params_stats, param_names_to_use, actual_convergence_evals, output_suffix)
+    create_results_table(params_stats, param_columns, actual_convergence_evals, output_suffix)
     
     # Plot parameter evolution (traces)
-    plot_parameter_traces(results_array, likelihood, param_names_to_use, output_suffix)
+    plot_parameter_traces(results_array, likelihood, param_columns, output_suffix)
     
     # Plot parameter distributions (prior vs posterior)
-    plot_parameter_distributions(params_new_con, param_names_to_use, actual_convergence_evals, output_suffix)
+    plot_parameter_distributions(params_new_con, param_columns, actual_convergence_evals, output_suffix)
     
     # Plot likelihood evolution
     plot_likelihood_evolution(likelihood, output_suffix)
     
     # Plot parameter correlations
-    plot_parameter_correlations(params_new_con, param_names_to_use, output_suffix)
+    plot_parameter_correlations(params_new_con, param_columns, output_suffix)
     
     return params_stats, best_set, likelihood
 
+def save_best_parameter_set(best_set, param_columns, best_likelihood, output_suffix):
+    """Save the best parameter set and its likelihood to a CSV file."""
+    best_params_df = pd.DataFrame([best_set], columns=param_columns)
+    best_params_df['Best_Likelihood'] = best_likelihood
+    best_params_filename = f'best_parameters{output_suffix}.csv'
+    best_params_df.to_csv(best_params_filename, index=False)
+    print(f"\nBest parameter set saved to '{best_params_filename}'")
+
 def create_results_table(params_stats, param_names, convergence_evals, output_suffix=""):
-    """Create a summary table of parameter statistics"""
-    
+    """Create a summary table of parameter statistics""" 
     results_df = pd.DataFrame({
         'Parameter': param_names,
         'Mean_All': params_stats['mean_all'],
@@ -186,8 +178,6 @@ def create_results_table(params_stats, param_names, convergence_evals, output_su
         'Skewness': params_stats['skew_con'],
         'Kurtosis': params_stats['kurt_con']
     })
-    
-    # Save table with timestamp
     filename = f'dream_parameters_summary{output_suffix}.csv'
     results_df.to_csv(filename, index=False)
     print(f"\\nParameter summary saved to '{filename}'")
@@ -200,7 +190,6 @@ def plot_parameter_traces(results_array, likelihood, param_names, output_suffix=
     numParams = results_array.shape[1]
     n_cols = 4
     n_rows = int(np.ceil(numParams / n_cols))
-    
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4*n_rows))
     if numParams == 1:
         axes = [axes]
@@ -223,7 +212,7 @@ def plot_parameter_traces(results_array, likelihood, param_names, output_suffix=
     plt.tight_layout()
     filename = f'dream_parameter_traces{output_suffix}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight')
-    plt.close()  # Close the figure to free memory
+    plt.close() 
 
 def plot_parameter_distributions(params_converged, param_names, convergence_evals, output_suffix=""):
     """Plot parameter distributions comparing prior and posterior"""

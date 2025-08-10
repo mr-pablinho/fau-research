@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Research: A Bayesian Framework to Assess and Create Maps of Groundwater Flooding
-Dataset and algorithms for the probabilistic assessment of groundwater flooding occurrence
-Adapted for new Garching GWM model (2025)
-@author: Pablo Merchán-Rivera
-
 DREAM algorithm settings and executable for new model
 """
 
@@ -20,48 +15,24 @@ os.makedirs("logs", exist_ok=True)
 
 if __name__ == "__main__":
 
-    # datetime object containing current date and time
     time_start = datetime.now()
-    time_start_string = time_start.strftime("%d/%m/%Y %H:%M:%S")  # dd/mm/YY H:M:S
+    time_start_string = time_start.strftime("%d/%m/%Y %H:%M:%S")
 
     print(f"Starting DREAM algorithm at {time_start_string}")
     print(f"Parameters to calibrate: {len(di.param_distros)}")
     print(f"Parameter names: {di.names}")
 
-    # set the random state
-    random_state = di.my_seed
-    np.random.seed(random_state)
+    np.random.seed(di.my_seed)
 
-    # general settings
-    parallel = "seq"
+    # General settings
     spot_setup = spot_setup(_used_algorithm="dream")
 
-    # select number of maximum repetitions
-    rep = di.rep
-
-    # acceptance test option
-    ato = 6
-
-    # number of crossover values
-    nCr = 4
-
-    # number of chains and convergence limit (Gelman-Rubin).
-    # Gelman–Rubin convergence diagnostic provides a numerical convergence summary based on multiple chains
-    nChains = di.nChains
-    convergence_limit = (
-        1.0  # maximum Gelman–Rubin diagnostic across all model parameters
-    )
-
-    # define DREAM algorithm parameters (further details in Vrugt, 2016)
-    runs_after_convergence = di.convEvals
-    epsilon = 1e-5  # tolerance threshold (Turner & Sederberg, 2012)
-
     print(f"DREAM settings:")
-    print(f"  - Max repetitions: {rep}")
-    print(f"  - Chains: {nChains}")
-    print(f"  - Convergence limit: {convergence_limit}")
-    print(f"  - Runs after convergence: {runs_after_convergence}")
-    print(f"  - Random seed: {random_state}")
+    print(f"  - Max repetitions: {di.rep}")
+    print(f"  - Chains: {di.nChains}")
+    print(f"  - Convergence limit: {di.convergence_limit}")
+    print(f"  - Runs after convergence: {di.convEvals}")
+    print(f"  - Random seed: {di.my_seed}")
 
     # Create timestamped filenames
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -69,14 +40,14 @@ if __name__ == "__main__":
     csv_filename = f"{base_filename}.csv"
     log_filename = f"./logs/log_dream_{timestamp}.txt"
 
-    # initiate DREAM algorithm
+    # Initiate DREAM algorithm
     sampler = spotpy.algorithms.dream(
         spot_setup,
         dbname=base_filename,
         dbformat="csv",
         db_precision=np.float32,
         save_sim=True,
-        random_state=random_state,
+        random_state=di.my_seed,
     )
 
     print("Starting DREAM sampling...")
@@ -85,13 +56,13 @@ if __name__ == "__main__":
 
     try:
         r_hat = sampler.sample(  # Gelman-Rubin diagnostic
-            rep,
-            nChains=nChains,
-            convergence_limit=convergence_limit,
-            runs_after_convergence=runs_after_convergence,
-            eps=epsilon,
-            acceptance_test_option=ato,
-            nCr=nCr,
+            di.rep,
+            nChains=di.nChains,
+            convergence_limit=di.convergence_limit,
+            runs_after_convergence=di.convEvals,
+            eps=di.epsilon,
+            acceptance_test_option=di.ato,
+            nCr=di.nCr,
         )
         print(f"DREAM sampling completed successfully")
         print(f"Gelman-Rubin diagnostic: {r_hat}")
@@ -111,7 +82,7 @@ if __name__ == "__main__":
             if os.path.exists(alt_file):
                 print(f"Found alternative database file: {alt_file}")
 
-    # load the likelihood, and the parameter values of all simulations
+    # Load the likelihood, and the parameter values of all simulations
     try:
         results = sampler.getdata()
         print(f"DREAM completed. Total samples: {len(results)}")
@@ -120,18 +91,14 @@ if __name__ == "__main__":
         print("DREAM completed. Results saved to database file.")
         results = None
 
-    # %% Register the end of the algorithm
-
     time_end = datetime.now()
-    time_end_string = time_end.strftime("%d/%m/%Y %H:%M:%S")  # dd/mm/YY H:M:S
+    time_end_string = time_end.strftime("%d/%m/%Y %H:%M:%S")
 
-    # Initialize log file with timestamp
     f = open(log_filename, "w")
-
-    if results is not None and rep > len(results):
-        convergence_eval = "yes"
+    if results is not None and di.rep > len(results):
+        convergence_reached = "yes"
     else:
-        convergence_eval = "no"
+        convergence_reached = "no"
 
     summary = f""" 
     
@@ -141,16 +108,18 @@ The DREAM algorithm finished for the new GWM model.
 
 - Beginning of the simulation:..... {time_start_string}
 - End of the simulation:........... {time_end_string}
-- Random seed:..................... {random_state}
-- Convergence reached:............. {convergence_eval}
-- Acceptance test type:............ {ato}
-- Maximum repetitions:............. {rep}
-- Runs after convergence:.......... {runs_after_convergence}
-- Gelman-Rubin convergence limit:.. {convergence_limit:.1f}
-- Epsilon tolerance threshold:..... {epsilon}
-- Number of crossover values:...... {nCr}
-- Number of chains:................ {nChains}
+- Random seed:..................... {di.my_seed}
+- Convergence reached:............. {convergence_reached}
+- Acceptance test type:............ {di.ato}
+- Maximum repetitions:............. {di.rep}
+- Runs after convergence:.......... {di.convEvals}
+- Gelman-Rubin convergence limit:.. {di.convergence_limit:.1f}
+- Epsilon tolerance threshold:..... {di.epsilon}
+- Number of crossover values:...... {di.nCr}
+- Number of chains:................ {di.nChains}
 - Number of parameters:............ {len(di.param_distros)}
+- Results file:.................... {csv_filename}
+- Log file:........................ {log_filename}
 
 Parameter names:
 {", ".join(di.names)}
