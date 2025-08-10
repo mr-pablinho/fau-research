@@ -564,6 +564,9 @@ def main():
     # TESTING: Set to small number for testing (e.g., 4), None for all runs
     max_runs = 4  # Change to None to run all post-convergence parameter sets
     
+    # Specific stress periods for analysis (None for all stress periods)
+    target_stress_periods = ["stress_period_5", "stress_period_300", "stress_period_800"]  # Set to None for all stress periods
+    
     # PROBABILITY THRESHOLDS: Depth below surface to consider "at risk"
     depth_thresholds = [0.0, 1.0, 2.0]  # meters below topography
     # 0.0 = reaches surface, 1.0 = within 1m of surface, 2.0 = within 2m of surface
@@ -603,18 +606,27 @@ def main():
         else:
             print(f"📊 FULL ANALYSIS: Running all {len(full_param_sets)} parameter sets")
         
+        # Display stress period selection
+        if target_stress_periods:
+            print(f"📊 Analyzing specific stress periods: {target_stress_periods}")
+        else:
+            print(f"📊 Analyzing all available stress periods")
+        
         # Step 3: Run ensemble of models (with DREAM timestamp)
         results_summary = run_ensemble_models(full_param_sets, output_base_dir, timestamp=dream_timestamp)
         
         # Step 4: Create probability maps
         if results_summary['successful_runs'] > 0:
-            probability_maps = create_probability_maps(results_summary, target_stress_periods=None, 
+            probability_maps = create_probability_maps(results_summary, target_stress_periods=target_stress_periods, 
                                                      depth_thresholds=depth_thresholds)
             
             print("\n✅ ANALYSIS COMPLETED SUCCESSFULLY!")
             print(f"   Output directory: {results_summary['output_dir']}")
             print(f"   Successful model runs: {results_summary['successful_runs']}")
-            print(f"   Probability maps created for all stress periods")
+            if target_stress_periods:
+                print(f"   Probability maps created for stress periods: {target_stress_periods}")
+            else:
+                print(f"   Probability maps created for all stress periods")
             
         else:
             print("❌ No successful model runs - cannot create probability maps")
