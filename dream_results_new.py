@@ -85,11 +85,6 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
         elif col.startswith('par') and not col.startswith('simulation'):
             param_columns.append(col)
     
-    # Also check for specific parameter names we know
-    for col in ['parhk3', 'parhk4']:
-        if col in data_results.columns and col not in param_columns:
-            param_columns.append(col)
-    
     if likelihood_col is None:
         print("Warning: No likelihood column found, using first column")
         likelihood_col = data_results.columns[0]
