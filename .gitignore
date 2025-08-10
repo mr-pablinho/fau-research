@@ -3,6 +3,6 @@ __pycache__/
 *.pyc
 old_results/
 .idea/
-# Output1_Input2/
 dream_plots_*/
+ensemble_*/
 bayes2022/
