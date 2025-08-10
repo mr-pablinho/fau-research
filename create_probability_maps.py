@@ -5,6 +5,20 @@ Comprehensive script to:
 2. Run GWM model for each parameter set
 3. Save all head values for each run  
 4. Create probability maps for groundwater reaching surface
+
+Enhanced Features:
+- Uses DREAM timestamp for organized output structure
+- Simple progress messages (no tqdm dependency)
+- Multiple depth threshold analysis
+- Configurable testing mode for limited runs
+
+Output Structure:
+- ensemble_results/ensemble_YYYYMMDD_HHMMSS/
+  ├── head_arrays/           # Pickled head arrays for each model run  
+  ├── model_workspaces/      # Individual MODFLOW workspaces (optional cleanup)
+  ├── probability_maps/      # Probability maps for each stress period and depth
+  ├── plots/                 # Visualization plots
+  └── results_summary.pkl    # Complete run metadata
 """
 
 import os
@@ -13,13 +27,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import pickle
-from tqdm import tqdm
 import flopy
+import re
 from GWM_model_run import GWM, get_heads_from_obs_csv
 from dream_init_new import (
     CALIBRATE_PARAMS, deterministic_values, LOG_TRANSFORM_PARAMS, 
     param_definitions, runs_after_convergence, flag
 )
+
+def extract_timestamp_from_filename(filename):
+    """
+    Extract timestamp from DREAM CSV filename
+    Expected format: dream_GWM_YYYYMMDD_HHMMSS.csv
+    
+    Returns:
+    - timestamp string (YYYYMMDD_HHMMSS) or None if not found
+    """
+    # Try to extract timestamp pattern YYYYMMDD_HHMMSS
+    timestamp_pattern = r'(\d{8}_\d{6})'
+    match = re.search(timestamp_pattern, filename)
+    
+    if match:
+        return match.group(1)
+    
+    # If no timestamp found, return None
+    return None
 
 def extract_post_convergence_parameters(dream_csv_path, convergence_point=None):
     """
@@ -109,23 +141,27 @@ def prepare_full_parameter_sets(post_conv_params):
     print(f"   Created {len(full_param_sets)} complete parameter sets")
     return full_param_sets
 
-def run_ensemble_models(full_param_sets, output_base_dir="ensemble_results"):
+def run_ensemble_models(full_param_sets, output_base_dir="ensemble_results", timestamp=None):
     """
     Run GWM model for each parameter set and save head arrays
     
     Parameters:
     - full_param_sets: List of parameter dictionaries
     - output_base_dir: Base directory for saving results
+    - timestamp: Timestamp string to use for output directory (if None, generates new one)
     
     Returns:
     - results_summary: Dictionary with run metadata
     """
     print(f"🚀 Running ensemble of {len(full_param_sets)} GWM models...")
     
-    # Create output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Create output directory with specified or generated timestamp
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
     output_dir = os.path.join(output_base_dir, f"ensemble_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
+    print(f"   📁 Output directory: {output_dir}")
     
     # Create subdirectories
     heads_dir = os.path.join(output_dir, "head_arrays")
@@ -144,7 +180,12 @@ def run_ensemble_models(full_param_sets, output_base_dir="ensemble_results"):
     }
     
     # Run models
-    for i, param_set in enumerate(tqdm(full_param_sets, desc="Running models")):
+    print(f"   🔧 Starting model runs...")
+    for i, param_set in enumerate(full_param_sets):
+        # Print progress every 10 runs or at key milestones
+        if i % 10 == 0 or i == len(full_param_sets) - 1:
+            print(f"   🔄 Running model {i+1}/{len(full_param_sets)} ({100*(i+1)/len(full_param_sets):.1f}%)")
+        
         try:
             run_id = f"run_{i:04d}"
             model_workspace = os.path.join(models_dir, run_id)
@@ -220,15 +261,17 @@ def run_ensemble_models(full_param_sets, output_base_dir="ensemble_results"):
     
     return results_summary
 
-def create_probability_maps(results_summary, target_stress_periods=None):
+def create_probability_maps(results_summary, target_stress_periods=None, depth_thresholds=[0.0]):
     """
-    Create probability maps for groundwater reaching surface
+    Create probability maps for groundwater reaching specified depths below surface
     
     Parameters:
     - results_summary: Results from run_ensemble_models
     - target_stress_periods: List of stress periods to analyze (None = all)
+    - depth_thresholds: List of depth thresholds below surface (e.g., [0.0, 1.0, 2.0])
+                       0.0 = reaches surface, 1.0 = within 1m of surface, etc.
     """
-    print(f"📊 Creating probability maps...")
+    print(f"📊 Creating probability maps for depth thresholds: {depth_thresholds} meters below surface...")
     
     output_dir = results_summary['output_dir']
     head_files = results_summary['head_files']
@@ -247,6 +290,8 @@ def create_probability_maps(results_summary, target_stress_periods=None):
     if not head_files:
         print("❌ No head files found!")
         return
+    
+    print(f"📊 Creating probability maps for {len(head_files)} model runs...")
     
     # Load first file to get dimensions and available time steps
     with open(head_files[0], 'rb') as f:
@@ -277,39 +322,56 @@ def create_probability_maps(results_summary, target_stress_periods=None):
     for sp in target_stress_periods:
         print(f"   Processing {sp}...")
         
-        # Initialize counters
-        exceed_count = np.zeros((nrows, ncols))
-        valid_count = np.zeros((nrows, ncols))
+        # Initialize probability maps for each depth threshold
+        sp_results = {}
         
-        # Process each model run
-        for head_file in tqdm(head_files, desc=f"Processing {sp}", leave=False):
-            try:
-                with open(head_file, 'rb') as f:
-                    head_data = pickle.load(f)
-                
-                if sp in head_data:
-                    head_array = head_data[sp]
-                    
-                    # Check where head exceeds topography (reaches surface)
-                    valid_mask = ~np.isnan(head_array)
-                    exceed_mask = (head_array > topography) & valid_mask
-                    
-                    exceed_count[exceed_mask] += 1
-                    valid_count[valid_mask] += 1
+        for depth_threshold in depth_thresholds:
+            # Initialize counters for this depth threshold
+            exceed_count = np.zeros((nrows, ncols))
+            valid_count = np.zeros((nrows, ncols))
             
-            except Exception as e:
-                print(f"⚠️  Error processing {head_file}: {e}")
+            # Process each model run
+            total_files = len(head_files)
+            for file_idx, head_file in enumerate(head_files):
+                # Print progress for each depth threshold
+                if file_idx % max(1, total_files // 10) == 0 or file_idx == total_files - 1:
+                    print(f"      📊 Processing {sp} (depth {depth_threshold}m): {file_idx+1}/{total_files} ({100*(file_idx+1)/total_files:.1f}%)")
+                
+                try:
+                    with open(head_file, 'rb') as f:
+                        head_data = pickle.load(f)
+                    
+                    if sp in head_data:
+                        head_array = head_data[sp]
+                        
+                        # Check where head is above (topography - depth_threshold)
+                        # For depth_threshold = 1.0: head > (topography - 1.0) means within 1m of surface
+                        valid_mask = ~np.isnan(head_array)
+                        threshold_elevation = topography - depth_threshold
+                        exceed_mask = (head_array > threshold_elevation) & valid_mask
+                        
+                        exceed_count[exceed_mask] += 1
+                        valid_count[valid_mask] += 1
+                
+                except Exception as e:
+                    print(f"⚠️  Error processing {head_file}: {e}")
+            
+            # Calculate probability (avoid division by zero)
+            probability = np.zeros((nrows, ncols))
+            valid_cells = valid_count > 0
+            probability[valid_cells] = exceed_count[valid_cells] / valid_count[valid_cells]
+            
+            # Store results for this depth threshold
+            threshold_key = f"depth_{depth_threshold:.1f}m"
+            sp_results[threshold_key] = {
+                'probability': probability,
+                'valid_count': valid_count,
+                'exceed_count': exceed_count,
+                'depth_threshold': depth_threshold,
+                'threshold_elevation': threshold_elevation
+            }
         
-        # Calculate probability (avoid division by zero)
-        probability = np.zeros((nrows, ncols))
-        valid_cells = valid_count > 0
-        probability[valid_cells] = exceed_count[valid_cells] / valid_count[valid_cells]
-        
-        probability_maps[sp] = {
-            'probability': probability,
-            'valid_count': valid_count,
-            'exceed_count': exceed_count
-        }
+        probability_maps[sp] = sp_results
     
     # Save probability maps
     prob_maps_file = os.path.join(output_dir, "probability_maps.pkl")
@@ -318,43 +380,68 @@ def create_probability_maps(results_summary, target_stress_periods=None):
             'probability_maps': probability_maps,
             'topography': topography,
             'grid_shape': (nrows, ncols),
-            'stress_periods': target_stress_periods
+            'stress_periods': target_stress_periods,
+            'depth_thresholds': depth_thresholds
         }, f)
     
     # Create visualizations
-    create_probability_plots(probability_maps, topography, output_dir)
+    create_probability_plots(probability_maps, topography, output_dir, depth_thresholds)
     
     print(f"✅ Probability maps created and saved to: {prob_maps_file}")
     return probability_maps
 
-def create_probability_plots(probability_maps, topography, output_dir):
-    """Create and save probability map visualizations"""
+def create_probability_plots(probability_maps, topography, output_dir, depth_thresholds):
+    """Create and save probability map visualizations for multiple depth thresholds"""
     
     plots_dir = os.path.join(output_dir, "probability_plots")
     os.makedirs(plots_dir, exist_ok=True)
     
     # Plot parameters
-    cmap = plt.cm.RdYlBu_r  # Red = high probability, Blue = low probability
+    from matplotlib import cm
+    cmap = cm.get_cmap('RdYlBu_r')  # Red = high probability, Blue = low probability
     
-    for sp, data in probability_maps.items():
-        probability = data['probability']
+    # Create plots for each stress period and depth threshold
+    for sp, sp_data in probability_maps.items():
         
-        # Create figure with subplots
-        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+        # Create subplot grid based on number of depth thresholds
+        n_thresholds = len(depth_thresholds)
+        if n_thresholds <= 2:
+            fig, axes = plt.subplots(1, n_thresholds, figsize=(8*n_thresholds, 6))
+        else:
+            ncols = min(3, n_thresholds)
+            nrows = (n_thresholds + ncols - 1) // ncols
+            fig, axes = plt.subplots(nrows, ncols, figsize=(8*ncols, 6*nrows))
         
-        # Probability map
-        im1 = axes[0].imshow(probability, cmap=cmap, vmin=0, vmax=1, origin='upper')
-        axes[0].set_title(f'Probability of GW Reaching Surface\n{sp.replace("_", " ").title()}')
-        axes[0].set_xlabel('Column')
-        axes[0].set_ylabel('Row')
-        plt.colorbar(im1, ax=axes[0], label='Probability')
+        # Handle single subplot case
+        if n_thresholds == 1:
+            axes = [axes]
+        elif n_thresholds > 1 and hasattr(axes, 'flatten'):
+            axes = axes.flatten()
         
-        # Valid sample count
-        im2 = axes[1].imshow(data['valid_count'], cmap='viridis', origin='upper')
-        axes[1].set_title(f'Number of Valid Samples\n{sp.replace("_", " ").title()}')
-        axes[1].set_xlabel('Column')
-        axes[1].set_ylabel('Row')
-        plt.colorbar(im2, ax=axes[1], label='Sample Count')
+        # Plot each depth threshold
+        for i, depth_threshold in enumerate(depth_thresholds):
+            threshold_key = f"depth_{depth_threshold:.1f}m"
+            
+            if threshold_key in sp_data:
+                data = sp_data[threshold_key]
+                probability = data['probability']
+                
+                # Create probability map
+                im = axes[i].imshow(probability, cmap=cmap, vmin=0, vmax=1, origin='upper')
+                
+                if depth_threshold == 0.0:
+                    title = f'P(GW Reaches Surface)\n{sp.replace("_", " ").title()}'
+                else:
+                    title = f'P(GW Within {depth_threshold:.1f}m of Surface)\n{sp.replace("_", " ").title()}'
+                
+                axes[i].set_title(title)
+                axes[i].set_xlabel('Column')
+                axes[i].set_ylabel('Row')
+                plt.colorbar(im, ax=axes[i], label='Probability', shrink=0.8)
+        
+        # Hide unused subplots
+        for i in range(len(depth_thresholds), len(axes)):
+            axes[i].set_visible(False)
         
         plt.tight_layout()
         
@@ -363,84 +450,107 @@ def create_probability_plots(probability_maps, topography, output_dir):
         plt.savefig(plot_file, dpi=300, bbox_inches='tight')
         plt.close()
     
-    # Summary statistics plot
-    create_summary_plots(probability_maps, plots_dir)
+    # Create summary statistics plots
+    create_summary_plots(probability_maps, plots_dir, depth_thresholds)
     
     print(f"   Probability plots saved to: {plots_dir}")
 
-def create_summary_plots(probability_maps, plots_dir):
-    """Create summary statistics plots"""
+def create_summary_plots(probability_maps, plots_dir, depth_thresholds):
+    """Create summary statistics plots for multiple depth thresholds"""
     
-    # Collect statistics
-    stats_data = []
-    for sp, data in probability_maps.items():
-        prob = data['probability']
-        valid_mask = data['valid_count'] > 0
+    from matplotlib import cm
+    
+    # Collect statistics for each depth threshold
+    all_stats_data = {}
+    
+    for depth_threshold in depth_thresholds:
+        threshold_key = f"depth_{depth_threshold:.1f}m"
+        stats_data = []
         
-        if np.any(valid_mask):
-            stats = {
-                'stress_period': sp,
-                'mean_probability': np.mean(prob[valid_mask]),
-                'max_probability': np.max(prob[valid_mask]),
-                'cells_with_risk': np.sum(prob[valid_mask] > 0.1),  # >10% probability
-                'high_risk_cells': np.sum(prob[valid_mask] > 0.5),  # >50% probability
-                'total_valid_cells': np.sum(valid_mask)
-            }
-            stats_data.append(stats)
+        for sp, sp_data in probability_maps.items():
+            if threshold_key in sp_data:
+                data = sp_data[threshold_key]
+                prob = data['probability']
+                valid_mask = data['valid_count'] > 0
+                
+                if np.any(valid_mask):
+                    stats = {
+                        'stress_period': sp,
+                        'mean_probability': np.mean(prob[valid_mask]),
+                        'max_probability': np.max(prob[valid_mask]),
+                        'cells_with_risk': np.sum(prob[valid_mask] > 0.1),  # >10% probability
+                        'high_risk_cells': np.sum(prob[valid_mask] > 0.5),  # >50% probability
+                        'total_valid_cells': np.sum(valid_mask),
+                        'depth_threshold': depth_threshold
+                    }
+                    stats_data.append(stats)
+        
+        if stats_data:
+            all_stats_data[threshold_key] = pd.DataFrame(stats_data)
     
-    if not stats_data:
+    if not all_stats_data:
         return
     
-    stats_df = pd.DataFrame(stats_data)
-    
-    # Create summary plots
+    # Create comparison plots for different depth thresholds
+    n_thresholds = len(depth_thresholds)
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
     
-    # Mean probability over time
-    axes[0, 0].bar(range(len(stats_df)), stats_df['mean_probability'])
-    axes[0, 0].set_title('Mean Probability of GW Reaching Surface')
+    colors = cm.get_cmap('viridis')(np.linspace(0, 1, n_thresholds))
+    
+    # Plot mean probability comparison
+    for i, (threshold_key, stats_df) in enumerate(all_stats_data.items()):
+        axes[0, 0].plot(range(len(stats_df)), stats_df['mean_probability'], 
+                       'o-', label=threshold_key, color=colors[i], alpha=0.8)
+    axes[0, 0].set_title('Mean Probability Comparison')
     axes[0, 0].set_xlabel('Stress Period')
     axes[0, 0].set_ylabel('Mean Probability')
-    axes[0, 0].tick_params(axis='x', rotation=45)
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
     
-    # Maximum probability over time
-    axes[0, 1].bar(range(len(stats_df)), stats_df['max_probability'], color='red', alpha=0.7)
-    axes[0, 1].set_title('Maximum Probability of GW Reaching Surface')
+    # Plot maximum probability comparison
+    for i, (threshold_key, stats_df) in enumerate(all_stats_data.items()):
+        axes[0, 1].plot(range(len(stats_df)), stats_df['max_probability'], 
+                       'o-', label=threshold_key, color=colors[i], alpha=0.8)
+    axes[0, 1].set_title('Maximum Probability Comparison')
     axes[0, 1].set_xlabel('Stress Period')
     axes[0, 1].set_ylabel('Maximum Probability')
-    axes[0, 1].tick_params(axis='x', rotation=45)
+    axes[0, 1].legend()
+    axes[0, 1].grid(True, alpha=0.3)
     
-    # Risk categories
-    axes[1, 0].bar(range(len(stats_df)), stats_df['cells_with_risk'], alpha=0.7, label='>10% risk')
-    axes[1, 0].bar(range(len(stats_df)), stats_df['high_risk_cells'], alpha=0.7, label='>50% risk')
-    axes[1, 0].set_title('Number of Cells at Risk')
+    # Plot cells at risk (>10% probability)
+    for i, (threshold_key, stats_df) in enumerate(all_stats_data.items()):
+        axes[1, 0].plot(range(len(stats_df)), stats_df['cells_with_risk'], 
+                       'o-', label=threshold_key, color=colors[i], alpha=0.8)
+    axes[1, 0].set_title('Number of Cells at Risk (>10% probability)')
     axes[1, 0].set_xlabel('Stress Period')
     axes[1, 0].set_ylabel('Cell Count')
     axes[1, 0].legend()
-    axes[1, 0].tick_params(axis='x', rotation=45)
+    axes[1, 0].grid(True, alpha=0.3)
     
-    # Risk percentage
-    risk_pct = 100 * stats_df['cells_with_risk'] / stats_df['total_valid_cells']
-    high_risk_pct = 100 * stats_df['high_risk_cells'] / stats_df['total_valid_cells']
-    
-    axes[1, 1].bar(range(len(stats_df)), risk_pct, alpha=0.7, label='>10% risk')
-    axes[1, 1].bar(range(len(stats_df)), high_risk_pct, alpha=0.7, label='>50% risk')
-    axes[1, 1].set_title('Percentage of Cells at Risk')
+    # Plot percentage at risk
+    for i, (threshold_key, stats_df) in enumerate(all_stats_data.items()):
+        risk_pct = 100 * stats_df['cells_with_risk'] / stats_df['total_valid_cells']
+        axes[1, 1].plot(range(len(stats_df)), risk_pct, 
+                       'o-', label=threshold_key, color=colors[i], alpha=0.8)
+    axes[1, 1].set_title('Percentage of Cells at Risk (>10% probability)')
     axes[1, 1].set_xlabel('Stress Period')
     axes[1, 1].set_ylabel('Percentage (%)')
     axes[1, 1].legend()
-    axes[1, 1].tick_params(axis='x', rotation=45)
+    axes[1, 1].grid(True, alpha=0.3)
     
     plt.tight_layout()
     
     # Save summary plot
-    summary_plot_file = os.path.join(plots_dir, "probability_summary.png")
+    summary_plot_file = os.path.join(plots_dir, "probability_summary_comparison.png")
     plt.savefig(summary_plot_file, dpi=300, bbox_inches='tight')
     plt.close()
     
-    # Save statistics CSV
-    stats_csv_file = os.path.join(plots_dir, "probability_statistics.csv")
-    stats_df.to_csv(stats_csv_file, index=False)
+    # Save statistics CSV for each depth threshold
+    for threshold_key, stats_df in all_stats_data.items():
+        stats_csv_file = os.path.join(plots_dir, f"probability_statistics_{threshold_key}.csv")
+        stats_df.to_csv(stats_csv_file, index=False)
+    
+    print(f"   Summary plots and statistics saved for {len(depth_thresholds)} depth thresholds")
 
 def main():
     """Main function to run the complete analysis"""
@@ -449,10 +559,14 @@ def main():
     print("=" * 50)
     
     # ==================== CONFIGURATION ====================
-    dream_csv_path = "dream_GWM_new.csv"  # Update this path
+    dream_csv_path = "dream_GWM_20250807_220325.csv"  # Update this path to your DREAM results
     
     # TESTING: Set to small number for testing (e.g., 4), None for all runs
     max_runs = 4  # Change to None to run all post-convergence parameter sets
+    
+    # PROBABILITY THRESHOLDS: Depth below surface to consider "at risk"
+    depth_thresholds = [0.0, 1.0, 2.0]  # meters below topography
+    # 0.0 = reaches surface, 1.0 = within 1m of surface, 2.0 = within 2m of surface
     
     # Other options
     output_base_dir = "ensemble_results"  # Base directory for outputs
@@ -468,6 +582,13 @@ def main():
         return
     
     try:
+        # Extract timestamp from DREAM CSV filename for consistent output organization
+        dream_timestamp = extract_timestamp_from_filename(dream_csv_path)
+        if dream_timestamp:
+            print(f"📅 Using DREAM timestamp: {dream_timestamp}")
+        else:
+            print(f"⚠️  No timestamp found in filename, will generate new timestamp")
+        
         # Step 1: Extract post-convergence parameters
         post_conv_params = extract_post_convergence_parameters(dream_csv_path)
         
@@ -482,12 +603,13 @@ def main():
         else:
             print(f"📊 FULL ANALYSIS: Running all {len(full_param_sets)} parameter sets")
         
-        # Step 3: Run ensemble of models
-        results_summary = run_ensemble_models(full_param_sets, output_base_dir)
+        # Step 3: Run ensemble of models (with DREAM timestamp)
+        results_summary = run_ensemble_models(full_param_sets, output_base_dir, timestamp=dream_timestamp)
         
         # Step 4: Create probability maps
         if results_summary['successful_runs'] > 0:
-            probability_maps = create_probability_maps(results_summary)
+            probability_maps = create_probability_maps(results_summary, target_stress_periods=None, 
+                                                     depth_thresholds=depth_thresholds)
             
             print("\n✅ ANALYSIS COMPLETED SUCCESSFULLY!")
             print(f"   Output directory: {results_summary['output_dir']}")
