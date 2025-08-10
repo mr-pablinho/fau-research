@@ -1,10 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
-
 old_results/
 .idea/
-bayes2022/
 # Output1_Input2/
-
 dream_plots_*/
