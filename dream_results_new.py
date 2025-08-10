@@ -139,22 +139,12 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
         else:
             print(f"  {name}: {value:.4f}")
 
-    # Save best parameter set to CSV using a function
+    # Execute analysis
     save_best_parameter_set(best_set, param_columns, best_likelihood, output_suffix)
-    
-    # Create results summary table
     create_results_table(params_stats, param_columns, actual_convergence_evals, output_suffix)
-    
-    # Plot parameter evolution (traces)
     plot_parameter_traces(results_array, likelihood, param_columns, output_suffix)
-    
-    # Plot parameter distributions (prior vs posterior)
     plot_parameter_distributions(params_new_con, param_columns, actual_convergence_evals, output_suffix)
-    
-    # Plot likelihood evolution
     plot_likelihood_evolution(likelihood, output_suffix)
-    
-    # Plot parameter correlations
     plot_parameter_correlations(params_new_con, param_columns, output_suffix)
     
     return params_stats, best_set, likelihood
@@ -232,26 +222,21 @@ def plot_parameter_distributions(params_converged, param_names, convergence_eval
     bars = 20
     alpha = 0.65
     
+    import spotpy
     for i in range(numParams):
-        # Try to get prior samples if available
         try:
-            import dream_init_new as di
-            if hasattr(di, 'samples') and i < len(di.samples[0]):
-                prior_samples = di.samples[:convergence_evals, i]
-                range_bounds = (di.param_distros[i].minbound, di.param_distros[i].maxbound)
-                # Plot prior histogram
-                axes[i].hist(prior_samples, bars, alpha=alpha+0.2, color='orange', 
-                            label="Prior", density=True, range=range_bounds)
-            else:
-                range_bounds = None
-        except (ImportError, AttributeError, IndexError):
-            print(f"Warning: Could not load prior samples for parameter {param_names[i]}")
+            prior_dist = di.param_distros[i]
+            # Sample from the prior distribution
+            prior_samples = np.array([prior_dist() for _ in range(convergence_evals)])
+            range_bounds = (prior_dist.minbound, prior_dist.maxbound) if hasattr(prior_dist, 'minbound') and hasattr(prior_dist, 'maxbound') else None
+            axes[i].hist(prior_samples, bars, alpha=alpha+0.2, color='orange', 
+                        label="Prior", density=True, range=range_bounds)
+        except Exception as e:
+            print(f"Warning: Could not sample prior for parameter {param_names[i]}: {e}")
             range_bounds = None
-        
         # Plot posterior histogram
         axes[i].hist(params_converged[:,i], bars, alpha=alpha, color='blue', 
                     label="Posterior", density=True, range=range_bounds)
-        
         axes[i].set_title(f'{param_names[i]}', fontsize=10)
         axes[i].set_xlabel('Parameter Value')
         axes[i].set_ylabel('Density')
@@ -292,49 +277,46 @@ def plot_likelihood_evolution(likelihood, output_suffix=""):
     plt.tight_layout()
     filename = f'dream_objective_evolution{output_suffix}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight')
-    plt.close()  # Close the figure to free memory
+    plt.close()
 
 def plot_parameter_correlations(params_converged, param_names, output_suffix=""):
     """Plot parameter correlation matrix"""
-    
-    # Calculate correlation matrix
+
     corr_matrix = np.corrcoef(params_converged.T)
-    
-    # Create figure
+
     fig, ax = plt.subplots(figsize=(12, 10))
-    
+
     # Plot correlation matrix
     im = ax.imshow(corr_matrix, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
-    
-    # Set ticks and labels
     ax.set_xticks(range(len(param_names)))
     ax.set_yticks(range(len(param_names)))
-    ax.set_xticklabels(param_names, rotation=45, ha='right')
+    ax.set_xticklabels(param_names, rotation=45, ha="right")
     ax.set_yticklabels(param_names)
-    
-    # Add correlation values as text
     for i in range(len(param_names)):
         for j in range(len(param_names)):
-            text = ax.text(j, i, f'{corr_matrix[i, j]:.2f}',
-                         ha="center", va="center", color="black", fontsize=8)
-    
-    # Add colorbar
+            text = ax.text(
+                j,
+                i,
+                f"{corr_matrix[i, j]:.2f}",
+                ha="center",
+                va="center",
+                color="black",
+                fontsize=8,
+            )
     cbar = plt.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label('Correlation Coefficient', rotation=270, labelpad=20)
-    
+
     plt.title('Parameter Correlation Matrix', fontsize=14)
     plt.tight_layout()
     filename = f'dream_parameter_correlation{output_suffix}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight')
-    plt.close()  # Close the figure to free memory
+    plt.close() 
 
-# %% Main execution
 
 if __name__ == "__main__":
-    
-    # Look for the most recent DREAM results file
     import glob
-    dream_files = glob.glob('dream_GWM_*.csv')
+    dream_files = glob.glob('dream_GWM_*.csv')\
+
     if not dream_files:
         print("No DREAM results files found. Please run the DREAM algorithm first (dream_run_new.py)")
         exit(1)
@@ -342,8 +324,6 @@ if __name__ == "__main__":
     # Sort by modification time and get the most recent
     most_recent_file = max(dream_files, key=os.path.getmtime)
     print(f"Using most recent results file: {most_recent_file}")
-    
-    # Extract timestamp for output directory
     timestamp_match = re.search(r'dream_GWM_(\d{8}_\d{6})\.csv', most_recent_file)
     if timestamp_match:
         timestamp = timestamp_match.group(1)
@@ -351,17 +331,13 @@ if __name__ == "__main__":
     else:
         output_dir = 'dream_plots_new'
     
-    # Create output directory for plots
     os.makedirs(output_dir, exist_ok=True)
     os.chdir(output_dir)
-    
-    # Analyze results (adjust convergence_evals based on your needs)
-    convergence_evals = 1000  # Number of final samples to consider converged
     
     try:
         stats, best_params, likelihood = analyze_dream_results(
             results_file=f'../{most_recent_file}', 
-            convergence_evals=convergence_evals
+            convergence_evals=di.convEvals
         )
         
         print("\\nAnalysis completed successfully!")
@@ -371,4 +347,4 @@ if __name__ == "__main__":
         print(f"Error during analysis: {e}")
         print("Make sure to run the DREAM algorithm first (dream_run_new.py)")
     
-    os.chdir('..')  # Return to main directory
+    os.chdir('..')
