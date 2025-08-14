@@ -11,6 +11,7 @@ from scipy.stats import skew, kurtosis
 import os
 import re
 from datetime import datetime
+import dream_modflow_new as dm
 
 # Parameter names for results
 params_names_short = list(di.param_definitions.keys())
@@ -141,6 +142,11 @@ def analyze_dream_results(results_file='dream_GWM_new.csv', convergence_evals=10
     plot_parameter_distributions(params_new_con, param_columns, actual_convergence_evals, output_suffix)
     plot_likelihood_evolution(likelihood, output_suffix)
     plot_parameter_correlations(params_new_con, param_columns, output_suffix)
+    # Plot best parameter set simulation against observations
+    try:
+        plot_best_vs_observations(best_set, param_columns, output_suffix)
+    except Exception as e:
+        print(f"Warning: Could not create best-vs-observations plot: {e}")
     
     return params_stats, best_set, likelihood
 
@@ -306,6 +312,112 @@ def plot_parameter_correlations(params_converged, param_names, output_suffix="")
     filename = f'dream_parameter_correlation{output_suffix}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close() 
+
+
+def plot_best_vs_observations(best_set, param_columns, output_suffix=""):
+    """Run the model with the best parameter set and plot simulated heads vs observations.
+
+    - best_set: 1D array of best parameter values (in the same representation as in the results CSV).
+    - param_columns: list of column names from the results file (e.g. ['parhk1','parKriv_Isar',...]).
+    """
+    print("\nRunning simulation for best parameter set and plotting vs observations...")
+
+    # Build a mapping from stripped parameter name -> index in best_set
+    param_index = {}
+    for idx, col in enumerate(param_columns):
+        name = col[3:] if col.startswith('par') else col
+        param_index[name] = idx
+
+    # Build x vector in the order expected by the spotpy setup (di.CALIBRATE_PARAMS)
+    x = []
+    for pname in di.CALIBRATE_PARAMS:
+        if pname in param_index:
+            x.append(best_set[param_index[pname]])
+        else:
+            # Use deterministic/default value (log-transform if necessary)
+            default_val = di.param_definitions[pname][0]
+            if pname in di.LOG_TRANSFORM_PARAMS:
+                # spotpy sampled log10 for these parameters, so provide log10(default)
+                x.append(np.log10(default_val))
+            else:
+                x.append(default_val)
+
+    # Run simulation using the existing spotpy wrapper (this will run MODFLOW)
+    setup = dm.spot_setup(_used_algorithm=None)
+    original_cwd = os.getcwd()
+    module_dir = os.path.abspath(os.path.dirname(__file__))
+    try:
+        os.chdir(module_dir)
+        sim_flat = setup.simulation(x)
+
+        # Load observed values to compare against (use absolute path)
+        obs_path = os.path.join(module_dir, 'Output1_Input2', 'obs_values.csv')
+        obs_df = pd.read_csv(obs_path, header=0)
+        obs_array = obs_df.values.astype(np.float64)
+    except Exception as e:
+        print(f"Error in simulation or loading observation values for plotting: {e}")
+        # restore cwd before returning
+        try:
+            os.chdir(original_cwd)
+        except Exception:
+            pass
+        return
+    finally:
+        # restore cwd even if simulation succeeded
+        try:
+            os.chdir(original_cwd)
+        except Exception:
+            pass
+
+    nper, nobs = obs_array.shape
+    sim_flat = np.array(sim_flat, dtype=np.float64)
+    if sim_flat.size != nper * nobs:
+        print(f"Warning: simulation output length ({sim_flat.size}) does not match observations ({nper}x{nobs}={nper*nobs}). Attempting to reshape using nper={nper}.")
+
+    try:
+        sim_array = sim_flat.reshape((nper, nobs))
+    except Exception:
+        # Fallback: try to infer nper from GWM settings (139)
+        try:
+            sim_array = sim_flat.reshape((139, -1))
+            nper, nobs = sim_array.shape
+        except Exception as e:
+            print(f"Failed to reshape simulation output: {e}")
+            return
+
+    # Plot observed vs simulated for each observation point
+    fig, axes = plt.subplots(int(np.ceil(nobs / 4)), 4, figsize=(16, 4 * int(np.ceil(nobs / 4))))
+    axes = np.atleast_1d(axes).flatten()
+
+    times = np.arange(nper)
+    for i in range(nobs):
+        ax = axes[i]
+        ax.plot(times, obs_array[:, i], label='Observed', color='black', linewidth=1.2)
+        ax.plot(times, sim_array[:, i], label='Simulated (best)', color=colors[i % len(colors)], alpha=0.9)
+        ax.set_title(f'Obs point {i+1}')
+        ax.set_xlabel('Stress period')
+        ax.set_ylabel('Head (m)')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8)
+
+    # Remove empty axes
+    for j in range(nobs, len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.tight_layout()
+    filename = f'best_vs_observations{output_suffix}.png'
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # Ensure sim_array is 2D and get its shape
+    sim_array = np.atleast_2d(sim_array)
+    nper, nobs = sim_array.shape
+
+    # Save simulated values alongside observations for convenience
+    sim_df = pd.DataFrame(sim_array, columns=[f'obs_{j+1}' for j in range(sim_array.shape[1])])
+    sim_filename = f'simulated_best_parameters{output_suffix}.csv'
+    sim_df.to_csv(sim_filename, index=False)
+    print(f"Best-vs-observations plot saved to '{filename}' and simulated values to '{sim_filename}'")
 
 
 if __name__ == "__main__":
