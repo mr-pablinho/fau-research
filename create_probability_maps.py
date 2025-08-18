@@ -10,13 +10,20 @@ Enhanced Features:
 - Simple progress messages (no tqdm dependency)
 - Multiple depth threshold analysis
 - Configurable testing mode for limited runs
+- Gaussian smoothing for visually appealing probability maps
+
+Smoothing Options:
+- Creates both original and smoothed probability maps
+- Configurable smoothing strength (sigma parameter)
+- Side-by-side comparison plots
+- Preserves original data while enhancing visualization
 
 Output Structure:
 - ensemble_results/ensemble_YYYYMMDD_HHMMSS/
   ├── head_arrays/           # Pickled head arrays for each model run
   ├── model_workspaces/      # Individual MODFLOW workspaces (optional cleanup)
   ├── probability_maps/      # Probability maps for each stress period and depth
-  ├── plots/                 # Visualization plots
+  ├── plots/                 # Visualization plots (original, smoothed, comparisons)
   └── results_summary.pkl    # Complete run metadata
 """
 
@@ -28,6 +35,7 @@ from datetime import datetime
 import pickle
 import flopy
 import re
+from scipy.ndimage import gaussian_filter
 from GWM_model_run import GWM, get_heads_from_obs_csv
 from dream_init_new import (
     CALIBRATE_PARAMS,
@@ -292,8 +300,45 @@ def run_ensemble_models(full_param_sets, timestamp=None):
     return results_summary
 
 
+def apply_subtle_smoothing(probability_map, valid_count, sigma=1.0):
+    """
+    Apply subtle Gaussian smoothing to probability maps for better visualization
+    
+    Parameters:
+    - probability_map: Original probability map (2D numpy array)
+    - valid_count: Count of valid model runs for each cell (2D numpy array)
+    - sigma: Standard deviation for Gaussian kernel (smaller = less smoothing)
+    
+    Returns:
+    - smoothed_probability: Smoothed probability map preserving valid regions
+    """
+    # Create a mask for valid cells (cells with at least some model runs)
+    valid_mask = valid_count > 0
+    
+    # Only smooth where we have valid data
+    smoothed = np.zeros_like(probability_map)
+    
+    if np.any(valid_mask):
+        # Apply Gaussian filter only to valid regions
+        # Set invalid regions to NaN temporarily for proper edge handling
+        temp_prob = probability_map.copy()
+        temp_prob[~valid_mask] = np.nan
+        
+        # Apply smoothing with proper handling of NaN values
+        # Use mode='nearest' to handle edges appropriately
+        smoothed_temp = gaussian_filter(temp_prob, sigma=sigma, mode='nearest')
+        
+        # Only keep smoothed values where we originally had valid data
+        smoothed[valid_mask] = smoothed_temp[valid_mask]
+        
+        # Ensure probability values remain in [0, 1] range after smoothing
+        smoothed = np.clip(smoothed, 0.0, 1.0)
+    
+    return smoothed
+
+
 def create_probability_maps(
-    results_summary, target_stress_periods=None, depth_thresholds=[0.0]
+    results_summary, target_stress_periods=None, depth_thresholds=[0.0], smoothing_sigma=1.0
 ):
     """
     Create probability maps for groundwater reaching specified depths below surface
@@ -303,6 +348,7 @@ def create_probability_maps(
     - target_stress_periods: List of stress periods to analyze (None = all)
     - depth_thresholds: List of depth thresholds below surface (e.g., [0.0, 1.0, 2.0])
                        0.0 = reaches surface, 1.0 = within 1m of surface, etc.
+    - smoothing_sigma: Standard deviation for Gaussian smoothing (1.0 = subtle smoothing)
     """
     print(
         f"📊 Creating probability maps for depth thresholds: {depth_thresholds} meters below surface..."
@@ -406,10 +452,15 @@ def create_probability_maps(
                 exceed_count[valid_cells] / valid_count[valid_cells]
             )
 
+            # Apply Gaussian smoothing for visually appealing maps
+            # Use configurable smoothing to preserve detail while reducing noise
+            probability_smooth = apply_subtle_smoothing(probability, valid_count, sigma=smoothing_sigma)
+
             # Store results for this depth threshold
             threshold_key = f"depth_{depth_threshold:.1f}m"
             sp_results[threshold_key] = {
                 "probability": probability,
+                "probability_smooth": probability_smooth,
                 "valid_count": valid_count,
                 "exceed_count": exceed_count,
                 "depth_threshold": depth_threshold,
@@ -442,7 +493,10 @@ def create_probability_maps(
 def create_probability_plots(
     probability_maps, topography, output_dir, depth_thresholds
 ):
-    """Create and save probability map visualizations for multiple depth thresholds"""
+    """Create and save probability map visualizations for multiple depth thresholds
+    
+    Creates both original and smoothed versions of probability maps for comparison
+    """
 
     plots_dir = os.path.join(output_dir, "probability_plots")
     os.makedirs(plots_dir, exist_ok=True)
@@ -455,6 +509,51 @@ def create_probability_plots(
     # Create plots for each stress period and depth threshold
     for sp, sp_data in probability_maps.items():
 
+        # Create comparison plots (original vs smoothed) for each depth threshold
+        for depth_threshold in depth_thresholds:
+            threshold_key = f"depth_{depth_threshold:.1f}m"
+
+            if threshold_key in sp_data:
+                data = sp_data[threshold_key]
+                probability_orig = data["probability"]
+                probability_smooth = data["probability_smooth"]
+
+                # Create side-by-side comparison plot
+                fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+
+                # Original probability map
+                im1 = axes[0].imshow(
+                    probability_orig, cmap=cmap, vmin=0, vmax=1, origin="upper"
+                )
+                
+                if depth_threshold == 0.0:
+                    title_base = f'P(GW Reaches Surface)\n{sp.replace("_", " ").title()}'
+                else:
+                    title_base = f'P(GW Within {depth_threshold:.1f}m of Surface)\n{sp.replace("_", " ").title()}'
+                
+                axes[0].set_title(f'{title_base}\n(Original)')
+                axes[0].set_xlabel("Column")
+                axes[0].set_ylabel("Row")
+                plt.colorbar(im1, ax=axes[0], label="Probability", shrink=0.8)
+
+                # Smoothed probability map
+                im2 = axes[1].imshow(
+                    probability_smooth, cmap=cmap, vmin=0, vmax=1, origin="upper"
+                )
+                
+                axes[1].set_title(f'{title_base}\n(Smoothed)')
+                axes[1].set_xlabel("Column")
+                axes[1].set_ylabel("Row")
+                plt.colorbar(im2, ax=axes[1], label="Probability", shrink=0.8)
+
+                plt.tight_layout()
+
+                # Save comparison plot
+                plot_file = os.path.join(plots_dir, f"probability_map_comparison_{sp}_{threshold_key}.png")
+                plt.savefig(plot_file, dpi=300, bbox_inches="tight")
+                plt.close()
+
+        # Also create the original multi-threshold plot for compatibility
         # Create subplot grid based on number of depth thresholds
         n_thresholds = len(depth_thresholds)
         if n_thresholds <= 2:
@@ -470,7 +569,7 @@ def create_probability_plots(
         elif n_thresholds > 1 and hasattr(axes, "flatten"):
             axes = axes.flatten()
 
-        # Plot each depth threshold
+        # Plot each depth threshold (original maps)
         for i, depth_threshold in enumerate(depth_thresholds):
             threshold_key = f"depth_{depth_threshold:.1f}m"
 
@@ -499,8 +598,56 @@ def create_probability_plots(
 
         plt.tight_layout()
 
-        # Save plot
+        # Save original multi-threshold plot
         plot_file = os.path.join(plots_dir, f"probability_map_{sp}.png")
+        plt.savefig(plot_file, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        # Create smoothed multi-threshold plot
+        if n_thresholds <= 2:
+            fig, axes = plt.subplots(1, n_thresholds, figsize=(8 * n_thresholds, 6))
+        else:
+            ncols = min(3, n_thresholds)
+            nrows = (n_thresholds + ncols - 1) // ncols
+            fig, axes = plt.subplots(nrows, ncols, figsize=(8 * ncols, 6 * nrows))
+
+        # Handle single subplot case
+        if n_thresholds == 1:
+            axes = [axes]
+        elif n_thresholds > 1 and hasattr(axes, "flatten"):
+            axes = axes.flatten()
+
+        # Plot each depth threshold (smoothed maps)
+        for i, depth_threshold in enumerate(depth_thresholds):
+            threshold_key = f"depth_{depth_threshold:.1f}m"
+
+            if threshold_key in sp_data:
+                data = sp_data[threshold_key]
+                probability_smooth = data["probability_smooth"]
+
+                # Create smoothed probability map
+                im = axes[i].imshow(
+                    probability_smooth, cmap=cmap, vmin=0, vmax=1, origin="upper"
+                )
+
+                if depth_threshold == 0.0:
+                    title = f'P(GW Reaches Surface) - Smoothed\n{sp.replace("_", " ").title()}'
+                else:
+                    title = f'P(GW Within {depth_threshold:.1f}m of Surface) - Smoothed\n{sp.replace("_", " ").title()}'
+
+                axes[i].set_title(title)
+                axes[i].set_xlabel("Column")
+                axes[i].set_ylabel("Row")
+                plt.colorbar(im, ax=axes[i], label="Probability", shrink=0.8)
+
+        # Hide unused subplots
+        for i in range(len(depth_thresholds), len(axes)):
+            axes[i].set_visible(False)
+
+        plt.tight_layout()
+
+        # Save smoothed multi-threshold plot
+        plot_file = os.path.join(plots_dir, f"probability_map_smoothed_{sp}.png")
         plt.savefig(plot_file, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -508,6 +655,7 @@ def create_probability_plots(
     create_summary_plots(probability_maps, plots_dir, depth_thresholds)
 
     print(f"   Probability plots saved to: {plots_dir}")
+    print(f"   📊 Created original, smoothed, and comparison plots for each stress period")
 
 
 def create_summary_plots(probability_maps, plots_dir, depth_thresholds):
@@ -664,6 +812,10 @@ def main():
     # PROBABILITY THRESHOLDS: Depth below surface to consider "at risk"
     depth_thresholds = [0.0, 1.0, 2.0]  # meters below topography
     # 0.0 = reaches surface, 1.0 = within 1m of surface, 2.0 = within 2m of surface
+    
+    # SMOOTHING: Gaussian filter parameter for visual enhancement
+    smoothing_sigma = 1.0  # Standard deviation for Gaussian kernel
+    # Values: 0.5 = very subtle, 1.0 = subtle (recommended), 2.0 = moderate smoothing
     # ======================================================
 
     # Check if DREAM results file exists
@@ -703,11 +855,13 @@ def main():
                 f"📊 FULL ANALYSIS: Running all {len(full_param_sets)} parameter sets"
             )
 
-        # Display stress period selection
+        # Display configuration
         if target_stress_periods:
             print(f"📊 Analyzing specific stress periods: {target_stress_periods}")
         else:
             print(f"📊 Analyzing all available stress periods")
+        
+        print(f"🎨 Smoothing parameter (sigma): {smoothing_sigma}")
 
         # Step 3: Run ensemble of models (with DREAM timestamp)
         results_summary = run_ensemble_models(
@@ -720,11 +874,13 @@ def main():
                 results_summary,
                 target_stress_periods=target_stress_periods,
                 depth_thresholds=depth_thresholds,
+                smoothing_sigma=smoothing_sigma,
             )
 
             print("\n✅ ANALYSIS COMPLETED SUCCESSFULLY!")
             print(f"   Output directory: {results_summary['output_dir']}")
             print(f"   Successful model runs: {results_summary['successful_runs']}")
+            print(f"   📊 Created original and smoothed probability maps (σ={smoothing_sigma})")
             if target_stress_periods:
                 print(
                     f"   Probability maps created for stress periods: {target_stress_periods}"
