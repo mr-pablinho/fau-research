@@ -504,7 +504,7 @@ def create_probability_plots(
     # Plot parameters
     from matplotlib import cm
 
-    cmap = cm.get_cmap("RdYlBu_r")  # Red = high probability, Blue = low probability
+    cmap = cm.get_cmap("turbo")  # Turbo colormap for enhanced visualization
 
     # Create plots for each stress period and depth threshold
     for sp, sp_data in probability_maps.items():
