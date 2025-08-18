@@ -7,3 +7,5 @@ dream_plots_*/
 ensemble_*/
 bayes2022/
 dream_GWM_*.csv
+log_dream_*.txt
+actual_obs/
