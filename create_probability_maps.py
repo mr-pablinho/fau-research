@@ -4,27 +4,6 @@
 2. Run GWM model for each parameter set
 3. Save all head values for each run
 4. Create probability maps for groundwater reaching surface
-
-Enhanced Features:
-- Uses DREAM timestamp for organized output structure
-- Simple progress messages (no tqdm dependency)
-- Multiple depth threshold analysis
-- Configurable testing mode for limited runs
-- Gaussian smoothing for visually appealing probability maps
-
-Smoothing Options:
-- Creates both original and smoothed probability maps
-- Configurable smoothing strength (sigma parameter)
-- Side-by-side comparison plots
-- Preserves original data while enhancing visualization
-
-Output Structure:
-- ensemble_results/ensemble_YYYYMMDD_HHMMSS/
-  ├── head_arrays/           # Pickled head arrays for each model run
-  ├── model_workspaces/      # Individual MODFLOW workspaces (optional cleanup)
-  ├── probability_maps/      # Probability maps for each stress period and depth
-  ├── plots/                 # Visualization plots (original, smoothed, comparisons)
-  └── results_summary.pkl    # Complete run metadata
 """
 
 import os
@@ -142,28 +121,18 @@ def extract_post_convergence_parameters(dream_csv_path, convergence_point=None):
 
 def prepare_full_parameter_sets(post_conv_params):
     """
-    Combine post-convergence calibrated parameters with fixed parameters
+    Use only fixed parameter values
 
     Returns:
-    - full_param_sets: List of dictionaries, each containing all parameters for one model run
+    - full_param_sets: List of dictionaries, each containing fixed parameters for one model run
     """
-    print(f"🔧 Preparing full parameter sets...")
+    print(f"🔧 Using fixed parameter values only...")
 
-    full_param_sets = []
+    # Use only fixed/deterministic values for all runs
+    param_set = deterministic_values.copy()
+    full_param_sets = [param_set]  # Single parameter set with fixed values
 
-    for idx, row in post_conv_params.iterrows():
-        param_set = deterministic_values.copy()  # Start with default/fixed values
-
-        # Update with calibrated values
-        for param in CALIBRATE_PARAMS:
-            if param in row.index:
-                param_set[param] = row[param]
-            else:
-                print(f"⚠️  Warning: {param} not found in post-convergence results")
-
-        full_param_sets.append(param_set)
-
-    print(f"   Created {len(full_param_sets)} complete parameter sets")
+    print(f"   Created 1 parameter set with fixed values")
     return full_param_sets
 
 
