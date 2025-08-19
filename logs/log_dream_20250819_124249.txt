@@ -1,0 +1,27 @@
+ 
+    
+->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->
+
+The DREAM algorithm finished for the new GWM model.
+
+- Beginning of the simulation:..... 19/08/2025 12:42:50
+- End of the simulation:........... 19/08/2025 13:16:05
+- Random seed:..................... 246
+- Convergence reached:............. yes
+- Acceptance test type:............ 6
+- Maximum repetitions:............. 10000
+- Runs after convergence:.......... 20
+- Gelman-Rubin convergence limit:.. 1.0
+- Epsilon tolerance threshold:..... 1e-05
+- Number of crossover values:...... 4
+- Number of chains:................ 7
+- Number of parameters:............ 2
+- Results file:.................... dream_GWM_20250819_124249.csv
+- Log file:........................ ./logs/log_dream_20250819_124249.txt
+
+Parameter names:
+hk4, hk5
+
+->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->
+
+    
