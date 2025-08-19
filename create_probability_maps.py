@@ -928,7 +928,7 @@ def main():
         return
 
     # TESTING: Set to small number for testing (e.g., 4), None for all runs
-    max_runs = 4  # Change to None to run all post-convergence parameter sets
+    max_runs = None  # Change to None to run all post-convergence parameter sets
 
     # FALLBACK: If no post-convergence parameters, use last N runs
     fallback_last_n = 3  # Options: 10, 50, 100, or any number you decide
