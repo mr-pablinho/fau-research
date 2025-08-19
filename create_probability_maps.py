@@ -14,6 +14,7 @@ from datetime import datetime
 import pickle
 import flopy
 import re
+import glob
 from scipy.ndimage import gaussian_filter
 from GWM_model_run import GWM, get_heads_from_obs_csv
 from dream_init_new import (
@@ -757,6 +758,31 @@ def create_summary_plots(probability_maps, plots_dir, depth_thresholds):
     )
 
 
+def find_most_recent_dream_file():
+    """
+    Find the most recent DREAM results file based on modification time
+    
+    Returns:
+    - dream_csv_path: Path to the most recent DREAM results file
+    - timestamp: Extracted timestamp from filename
+    """
+    import glob
+    
+    dream_files = glob.glob('dream_GWM_*.csv')
+    
+    if not dream_files:
+        raise FileNotFoundError("No DREAM results files found. Please run the DREAM algorithm first.")
+    
+    # Sort by modification time and get the most recent
+    most_recent_file = max(dream_files, key=os.path.getmtime)
+    print(f"📁 Found most recent DREAM results file: {most_recent_file}")
+    
+    # Extract timestamp from filename
+    timestamp = extract_timestamp_from_filename(most_recent_file)
+    
+    return most_recent_file, timestamp
+
+
 def main():
     """Main function to run the complete analysis"""
 
@@ -764,9 +790,19 @@ def main():
     print("=" * 50)
 
     # ==================== CONFIGURATION ====================
-    dream_csv_path = (
-        "dream_GWM_20250807_220325.csv"  # Update this path to your DREAM results
-    )
+    
+    # Automatically find the most recent DREAM results file
+    try:
+        dream_csv_path, dream_timestamp = find_most_recent_dream_file()
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        print("Available CSV files:")
+        csv_files = [
+            f for f in os.listdir(".") if f.endswith(".csv") and "dream" in f.lower()
+        ]
+        for f in csv_files:
+            print(f"   - {f}")
+        return
 
     # TESTING: Set to small number for testing (e.g., 4), None for all runs
     max_runs = 4  # Change to None to run all post-convergence parameter sets
@@ -787,20 +823,8 @@ def main():
     # Values: 0.5 = very subtle, 1.0 = subtle (recommended), 2.0 = moderate smoothing
     # ======================================================
 
-    # Check if DREAM results file exists
-    if not os.path.exists(dream_csv_path):
-        print(f"❌ DREAM results file not found: {dream_csv_path}")
-        print("Available CSV files:")
-        csv_files = [
-            f for f in os.listdir(".") if f.endswith(".csv") and "dream" in f.lower()
-        ]
-        for f in csv_files:
-            print(f"   - {f}")
-        return
-
     try:
-        # Extract timestamp from DREAM CSV filename for consistent output organization
-        dream_timestamp = extract_timestamp_from_filename(dream_csv_path)
+        # We already have the timestamp from find_most_recent_dream_file()
         if dream_timestamp:
             print(f"📅 Using DREAM timestamp: {dream_timestamp}")
         else:
