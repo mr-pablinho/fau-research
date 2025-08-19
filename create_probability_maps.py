@@ -232,18 +232,31 @@ def extract_post_convergence_parameters(dream_csv_path, fallback_last_n=50, drea
 
 def prepare_full_parameter_sets(post_conv_params):
     """
-    Use only fixed parameter values
+    Create parameter sets from post-convergence DREAM results, combining with fixed values
 
     Returns:
-    - full_param_sets: List of dictionaries, each containing fixed parameters for one model run
+    - full_param_sets: List of dictionaries, each containing parameters for one model run
     """
-    print(f"🔧 Using fixed parameter values only...")
+    print(f"🔧 Creating parameter sets from DREAM results...")
 
-    # Use only fixed/deterministic values for all runs
-    param_set = deterministic_values.copy()
-    full_param_sets = [param_set]  # Single parameter set with fixed values
+    full_param_sets = []
+    
+    # Create one parameter set for each row in post_conv_params
+    for idx, (_, param_row) in enumerate(post_conv_params.iterrows()):
+        # Start with deterministic/fixed values as base
+        param_set = deterministic_values.copy()
+        
+        # Override with DREAM-sampled parameters
+        for param_name in param_row.index:
+            if param_name in param_set:
+                param_set[param_name] = param_row[param_name]
+            else:
+                # If parameter not in deterministic_values, add it anyway
+                param_set[param_name] = param_row[param_name]
+        
+        full_param_sets.append(param_set)
 
-    print(f"   Created 1 parameter set with fixed values")
+    print(f"   Created {len(full_param_sets)} parameter sets from DREAM results")
     return full_param_sets
 
 
