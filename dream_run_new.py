@@ -34,8 +34,8 @@ if __name__ == "__main__":
     print(f"  - Runs after convergence: {di.convEvals}")
     print(f"  - Random seed: {di.my_seed}")
 
-    # Create timestamped filenames
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Use the timestamp from dream_init_new.py for consistent naming
+    timestamp = di.timestamp
     base_filename = f"dream_GWM_{timestamp}"
     csv_filename = f"{base_filename}.csv"
     log_filename = f"./logs/log_dream_{timestamp}.txt"

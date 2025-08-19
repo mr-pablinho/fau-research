@@ -15,6 +15,7 @@ import pickle
 import flopy
 import re
 import glob
+import warnings
 from scipy.ndimage import gaussian_filter
 from GWM_model_run import GWM, get_heads_from_obs_csv
 from dream_init_new import (
@@ -22,9 +23,11 @@ from dream_init_new import (
     deterministic_values,
     LOG_TRANSFORM_PARAMS,
     param_definitions,
-    runs_after_convergence,
+    convEvals,
     flag,
 )
+
+warnings.filterwarnings("ignore", message="'mode' parameter is deprecated", category=DeprecationWarning)
 
 
 def extract_timestamp_from_filename(filename):
@@ -46,13 +49,81 @@ def extract_timestamp_from_filename(filename):
     return None
 
 
-def extract_post_convergence_parameters(dream_csv_path, convergence_point=None):
+def read_convergence_info_from_log(dream_timestamp):
+    """
+    Read convergence information from DREAM log file based on timestamp
+    
+    Parameters:
+    - dream_timestamp: Timestamp string (YYYYMMDD_HHMMSS)
+    
+    Returns:
+    - dict with convergence info: {'converged': bool, 'runs_after_convergence': int, 'log_file': str}
+    """
+    if not dream_timestamp:
+        return {'converged': None, 'runs_after_convergence': None, 'log_file': None}
+    
+    # First try exact timestamp match
+    exact_log_file = f'logs/log_dream_{dream_timestamp}.txt'
+    
+    if os.path.exists(exact_log_file):
+        log_file = exact_log_file
+        print(f"📄 Found exact timestamp match: {log_file}")
+    else:
+        # Fallback: look for log files with matching date
+        date_part = dream_timestamp.split('_')[0]
+        log_files = glob.glob(f'logs/log_dream_{date_part}_*.txt')
+        
+        if not log_files:
+            print(f"⚠️  No log file found for date {date_part}")
+            return {'converged': None, 'runs_after_convergence': None, 'log_file': None}
+        
+        # If multiple log files for the same date, get the one closest in time
+        if len(log_files) > 1:
+            print(f"📄 Found {len(log_files)} log files for date {date_part}: {[os.path.basename(f) for f in log_files]}")
+            # Use the most recent one (could be improved with better time matching)
+            log_file = max(log_files, key=os.path.getmtime)
+            print(f"📄 Using most recent: {log_file}")
+        else:
+            log_file = log_files[0]
+            print(f"📄 Using date match: {log_file}")
+    
+    # Parse the log file
+    convergence_info = {
+        'converged': None,
+        'runs_after_convergence': None,
+        'log_file': log_file
+    }
+    
+    try:
+        with open(log_file, 'r') as f:
+            content = f.read()
+            
+            # Look for convergence status
+            if 'Convergence reached:' in content:
+                convergence_match = re.search(r'Convergence reached:\.+ (yes|no)', content)
+                if convergence_match:
+                    convergence_info['converged'] = convergence_match.group(1).lower() == 'yes'
+            
+            # Look for runs after convergence
+            if 'Runs after convergence:' in content:
+                runs_match = re.search(r'Runs after convergence:\.+ (\d+)', content)
+                if runs_match:
+                    convergence_info['runs_after_convergence'] = int(runs_match.group(1))
+    
+    except Exception as e:
+        print(f"⚠️  Error reading log file {log_file}: {e}")
+    
+    return convergence_info
+
+
+def extract_post_convergence_parameters(dream_csv_path, fallback_last_n=50, dream_timestamp=None):
     """
     Extract post-convergence parameter sets from DREAM CSV file
 
     Parameters:
     - dream_csv_path: Path to DREAM results CSV
-    - convergence_point: Number of runs to skip (pre-convergence). If None, uses last 500 runs
+    - fallback_last_n: If no post-convergence runs available, take last N runs (default: 50)
+    - dream_timestamp: Timestamp to look up convergence info from log files
 
     Returns:
     - post_conv_params: DataFrame with post-convergence parameter sets
@@ -62,6 +133,17 @@ def extract_post_convergence_parameters(dream_csv_path, convergence_point=None):
     # Load DREAM results
     dream_results = pd.read_csv(dream_csv_path)
     print(f"   Total DREAM runs: {len(dream_results)}")
+
+    # Check convergence status from log files
+    convergence_info = read_convergence_info_from_log(dream_timestamp)
+    
+    if convergence_info['converged'] is not None:
+        if convergence_info['converged']:
+            print(f"✅ Log file confirms: Convergence reached!")
+            print(f"   Runs after convergence from log: {convergence_info['runs_after_convergence']}")
+        else:
+            print(f"❌ Log file confirms: Convergence NOT reached!")
+            print(f"   Will use fallback method (last {fallback_last_n} runs)")
 
     # Extract parameter columns (skip 'like1' and simulation columns)
     param_cols = [
@@ -82,15 +164,43 @@ def extract_post_convergence_parameters(dream_csv_path, convergence_point=None):
 
     print(f"   Parameter columns found: {param_cols}")
 
-    # Determine convergence point
-    if convergence_point is None:
-        convergence_point = max(0, len(dream_results) - runs_after_convergence)
-
-    # Extract post-convergence runs
-    post_conv_params = dream_results.iloc[convergence_point:][param_cols].copy()
-    print(
-        f"   Post-convergence runs: {len(post_conv_params)} (from row {convergence_point})"
-    )
+    # Determine how to extract parameters based on convergence
+    if convergence_info['converged'] is True and convergence_info['runs_after_convergence'] is not None:
+        # Use log file information for convergence point
+        runs_after_conv = convergence_info['runs_after_convergence']
+        convergence_point = max(0, len(dream_results) - runs_after_conv)
+        post_conv_params = dream_results.iloc[convergence_point:][param_cols].copy()
+        
+        if len(post_conv_params) > 0:
+            print(f"   📊 Using post-convergence runs: {len(post_conv_params)} (from row {convergence_point})")
+        else:
+            print(f"   ⚠️  No post-convergence runs found despite convergence (convergence point: {convergence_point})")
+            print(f"   📦 Fallback: Using last {fallback_last_n} runs instead")
+            start_point = max(0, len(dream_results) - fallback_last_n)
+            post_conv_params = dream_results.iloc[start_point:][param_cols].copy()
+            print(f"   📊 Fallback runs: {len(post_conv_params)} (from row {start_point})")
+            
+    elif convergence_info['converged'] is False:
+        # Convergence not reached, use fallback
+        print(f"   📦 No convergence: Using last {fallback_last_n} runs")
+        start_point = max(0, len(dream_results) - fallback_last_n)
+        post_conv_params = dream_results.iloc[start_point:][param_cols].copy()
+        print(f"   📊 Fallback runs: {len(post_conv_params)} (from row {start_point})")
+        
+    else:
+        # No log file info available, use default method
+        print(f"   ⚠️  No convergence info from log file, using default method")
+        convergence_point = max(0, len(dream_results) - convEvals)
+        post_conv_params = dream_results.iloc[convergence_point:][param_cols].copy()
+        
+        if len(post_conv_params) == 0:
+            print(f"   ⚠️  No post-convergence runs found (convergence point: {convergence_point})")
+            print(f"   📦 Fallback: Using last {fallback_last_n} runs instead")
+            start_point = max(0, len(dream_results) - fallback_last_n)
+            post_conv_params = dream_results.iloc[start_point:][param_cols].copy()
+            print(f"   📊 Fallback runs: {len(post_conv_params)} (from row {start_point})")
+        else:
+            print(f"   📊 Post-convergence runs: {len(post_conv_params)} (from row {convergence_point})")
 
     # Map parameter names if needed (handle 'par' prefix)
     param_mapping = {}
@@ -807,11 +917,14 @@ def main():
     # TESTING: Set to small number for testing (e.g., 4), None for all runs
     max_runs = 4  # Change to None to run all post-convergence parameter sets
 
+    # FALLBACK: If no post-convergence parameters, use last N runs
+    fallback_last_n = 3  # Options: 10, 50, 100, or any number you decide
+    
     # Specific stress periods for analysis (None for all stress periods)
     target_stress_periods = [
         "stress_period_5",
-        "stress_period_300",
-        "stress_period_800",
+        "stress_period_45",
+        "stress_period_100",
     ]  # Set to None for all stress periods
 
     # PROBABILITY THRESHOLDS: Depth below surface to consider "at risk"
@@ -831,7 +944,11 @@ def main():
             print(f"⚠️  No timestamp found in filename, will generate new timestamp")
 
         # Step 1: Extract post-convergence parameters
-        post_conv_params = extract_post_convergence_parameters(dream_csv_path)
+        post_conv_params = extract_post_convergence_parameters(
+            dream_csv_path, 
+            fallback_last_n=fallback_last_n, 
+            dream_timestamp=dream_timestamp
+        )
 
         # Step 2: Prepare full parameter sets
         full_param_sets = prepare_full_parameter_sets(post_conv_params)

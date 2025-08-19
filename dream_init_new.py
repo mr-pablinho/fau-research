@@ -44,13 +44,13 @@ LOG_TRANSFORM_PARAMS = [
 
 # Dynamic parameter selection
 CALIBRATE_PARAMS = [
-    'hk1',
-    'hk2',
-    'hk3',
+    # 'hk1',
+    # 'hk2',
+    # 'hk3',
     'hk4',
     'hk5',
-    'Kriv_Isar',
-    'Kriv_Muhlbach',
+    # 'Kriv_Isar',
+    # 'Kriv_Muhlbach',
 ]
 
 print(f"DREAM will calibrate {len(CALIBRATE_PARAMS)} parameters: {CALIBRATE_PARAMS}")
@@ -90,13 +90,12 @@ for param_name in fixed_params:
 # DREAM algorithm settings
 rep =  10000  # number of maximum repetitions
 numSamples = rep
-convEvals = 500  # number of runs after convergence
+convEvals = 20  # number of runs after convergence
 numParams = len(param_distros)
 nChains = max(7, 2*numParams + 1)  # number of chains
 convergence_limit = (1.0)  # maximum Gelman–Rubin diagnostic across all model parameters
 ato = 6  # acceptance test option (6: adaptive with covariance and parallel chains with crossover and adaptive step size)
 nCr = 4  # number of crossover values
-runs_after_convergence = 500  # number of runs after convergence
 epsilon = 1e-5  # tolerance threshold (Turner & Sederberg, 2012)
 
 print(f"\nDREAM settings:")

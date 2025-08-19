@@ -13,6 +13,11 @@ import re
 from datetime import datetime
 import dream_modflow_new as dm
 
+import warnings
+
+warnings.filterwarnings("ignore", message="'mode' parameter is deprecated", category=DeprecationWarning)
+
+
 # Parameter names for results
 params_names_short = list(di.param_definitions.keys())
 params_names_full = [
