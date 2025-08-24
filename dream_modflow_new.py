@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Research: A Bayesian Framework to Assess and Create Maps of Groundwater Flooding
-Dataset and algorithms for the probabilistic assessment of groundwater flooding occurrence
-Adapted for new Garching GWM model (2025)
-@author: Pablo Merchán-Rivera
-
 DREAM setup for new MODFLOW model
 """
 
